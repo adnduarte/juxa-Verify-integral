@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .prose {
+    max-width: none !important;
+  }
+  
+  .prose * {
+    color: black !important;
+  }
+  
+  .bg-neutral-900, .bg-neutral-950, .bg-black {
+    background: white !important;
+    color: black !important;
+    border: 1px solid #ccc !important;
+  }
+  
+  .text-white {
+    color: black !important;
+  }
+  
+  .border-neutral-800 {
+    border-color: #ccc !important;
+  }
+}

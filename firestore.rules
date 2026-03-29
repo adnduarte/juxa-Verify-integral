@@ -1,0 +1,326 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required) - Firebase Auth UID
+    //   - email: string (required) - User email
+    //   - role: string (required) - 'ADMIN', 'INVESTIGADOR', 'CLIENTE'
+    //   - companyId: string (optional)
+    //   - createdAt: string (required)
+    //
+    // Collection: cases
+    // Document ID: {caseId}
+    // Fields:
+    //   - caseId: string (required)
+    //   - ownerUid: string (required) - UID of creator
+    //   - status: string (required) - 'DRAFT', 'DIAGNOSIS', 'IN_PROGRESS', 'COMPLETED'
+    //   - dataIA: string (optional) - JSON string
+    //   - createdAt: string (required)
+    //   - updatedAt: string (required)
+    //
+    // Collection: pricing_plans
+    // Document ID: {planId}
+    // Fields:
+    //   - planName: string (required)
+    //   - max_diagnostics_monthly: number (required)
+    //   - feature_access: boolean (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.ownerUid;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() &&
+        (
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN') ||
+          ("email" in request.auth.token && request.auth.token.email in [
+            "aduarte@duarteaupartabogados.com",
+            "amarquez@duarteaupartabogados.com",
+            "mvazquez@juxa.mx",
+            "aduarte@juxa.mx",
+            "adnduarte1@gmail.com"
+          ])
+        );
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser() {
+      let data = request.resource.data;
+      let allowedFields = ['uid', 'email', 'role', 'clientType', 'clientProfile', 'credits', 'pagaresCredits', 'companyId', 'createdAt', 'updatedAt', 'phone', 'freeInvestigationsOffset'];
+      return hasRequiredFields(['uid', 'email', 'role', 'clientType', 'credits']) &&
+             hasOnlyAllowedFields(allowedFields) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
+             isValidEmail(data.email) && data.email.size() < 100 &&
+             data.role in ['ADMIN', 'EJECUTIVO_VENTAS', 'ANALISTA_MESA_CONTROL', 'GERENTE_DIRECTIVO', 'ANALISTA_CREDITO', 'INVESTIGADOR_SOCIAL', 'REVISOR_RRHH', 'SOLICITANTE', 'CLIENTE_FINANCIERO', 'INVESTIGADOR', 'CLIENTE'] &&
+             data.clientType in ['GRATUITO', 'BOLSA', 'SUSCRIPCION'] &&
+             (!('clientProfile' in data) || data.clientProfile == null || (data.clientProfile in ['GENERAL', 'INTEGRAL', 'INVESTIGACION', 'ORIGINACION', 'HR', 'PROVIDER', 'SME', 'CREDIT'])) &&
+             data.credits is number && data.credits >= 0 &&
+             (!('pagaresCredits' in data) || (data.pagaresCredits is number && data.pagaresCredits >= 0)) &&
+             (!('freeInvestigationsOffset' in data) || (data.freeInvestigationsOffset is number && data.freeInvestigationsOffset >= 0)) &&
+             (!('companyId' in data) || (data.companyId is string && data.companyId.size() < 100)) &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() < 50)) &&
+             (!('updatedAt' in data) || isValidDateString(data.updatedAt)) &&
+             (!('createdAt' in data) || isValidDateString(data.createdAt));
+    }
+
+    function isValidCase() {
+      let data = request.resource.data;
+      let allowedFields = ['caseId', 'ownerUid', 'status', 'dataIA', 'createdAt', 'updatedAt'];
+      return hasRequiredFields(['caseId', 'ownerUid', 'status', 'createdAt', 'updatedAt']) &&
+             hasOnlyAllowedFields(allowedFields) &&
+             data.caseId is string && data.caseId.size() > 0 && data.caseId.size() < 100 &&
+             data.ownerUid is string && data.ownerUid.size() > 0 && data.ownerUid.size() < 100 &&
+             data.status in ['DRAFT', 'DIAGNOSIS', 'IN_PROGRESS', 'COMPLETED'] &&
+             (!('dataIA' in data) || (data.dataIA is string && data.dataIA.size() < 1000000)) &&
+             isValidDateString(data.createdAt) &&
+             isValidDateString(data.updatedAt);
+    }
+
+    function isValidPricingPlan() {
+      let data = request.resource.data;
+      let allowedFields = ['planName', 'max_diagnostics_monthly', 'feature_access'];
+      return hasRequiredFields(['planName', 'max_diagnostics_monthly', 'feature_access']) &&
+             hasOnlyAllowedFields(allowedFields) &&
+             data.planName is string && data.planName.size() > 0 && data.planName.size() < 100 &&
+             data.max_diagnostics_monthly is number && data.max_diagnostics_monthly >= 0 &&
+             data.feature_access is bool;
+    }
+
+    function isValidInvestigation() {
+      let data = request.resource.data;
+      let allowedFields = ['id', 'clientId', 'requestedBy', 'status', 'title', 'details', 'result', 'clientProfile', 'investigationType', 'investigationScope', 'jobProfile', 'cvFileName', 'smartValidationRequested', 'visitAddress', 'contactInfo', 'creditAppFileName', 'providerReferencesFileName', 'providerFilesFileName', 'candidateEmail', 'candidatePhone', 'candidateLink', 'linkStatus', 'candidateData', 'socioeconomicDictamen', 'identityValidationResult', 'creditAnalysisResult', 'providerAnalysisResult', 'uploadedFileUrls', 'createdAt', 'updatedAt', 'creditStage', 'isDirect', 'score', 'scoreBreakdown'];
+      return hasRequiredFields(['id', 'clientId', 'requestedBy', 'status', 'title', 'createdAt', 'updatedAt']) &&
+             hasOnlyAllowedFields(allowedFields) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+             data.clientId is string && data.clientId.size() > 0 && data.clientId.size() < 100 &&
+             data.requestedBy is string && data.requestedBy.size() > 0 && data.requestedBy.size() < 100 &&
+             data.status in ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'REQUIRES_ATTENTION'] &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             (!('details' in data) || (data.details is string && data.details.size() < 10000)) &&
+             (!('result' in data) || (data.result is string && data.result.size() < 100000)) &&
+             (!('clientProfile' in data) || (data.clientProfile in ['GENERAL', 'HR', 'PROVIDER', 'SOCIOECONOMIC_CREDIT', 'CREDIT'])) &&
+             (!('investigationType' in data) || (data.investigationType in ['GENERAL', 'HR', 'PROVIDER', 'SOCIOECONOMIC_CREDIT', 'CREDIT'])) &&
+             (!('investigationScope' in data) || (data.investigationScope in ['SIMPLE', 'INTEGRAL'])) &&
+             (!('jobProfile' in data) || (data.jobProfile is string && data.jobProfile.size() < 10000)) &&
+             (!('cvFileName' in data) || data.cvFileName == null || (data.cvFileName is string && data.cvFileName.size() < 500)) &&
+             (!('smartValidationRequested' in data) || data.smartValidationRequested is bool) &&
+             (!('visitAddress' in data) || (data.visitAddress is string && data.visitAddress.size() < 1000)) &&
+             (!('contactInfo' in data) || (data.contactInfo is string && data.contactInfo.size() < 500)) &&
+             (!('creditAppFileName' in data) || data.creditAppFileName == null || (data.creditAppFileName is string && data.creditAppFileName.size() < 500)) &&
+             (!('providerReferencesFileName' in data) || data.providerReferencesFileName == null || (data.providerReferencesFileName is string && data.providerReferencesFileName.size() < 500)) &&
+             (!('providerFilesFileName' in data) || data.providerFilesFileName == null || (data.providerFilesFileName is string && data.providerFilesFileName.size() < 500)) &&
+             (!('candidateEmail' in data) || data.candidateEmail == null || (data.candidateEmail is string && data.candidateEmail.size() < 100)) &&
+             (!('candidatePhone' in data) || data.candidatePhone == null || (data.candidatePhone is string && data.candidatePhone.size() < 50)) &&
+             (!('candidateLink' in data) || data.candidateLink == null || (data.candidateLink is string && data.candidateLink.size() < 100)) &&
+             (!('linkStatus' in data) || data.linkStatus == null || (data.linkStatus in ['PENDING', 'OPENED', 'PHASE_1_COMPLETED', 'IN_PROGRESS', 'COMPLETED'])) &&
+             (!('candidateData' in data) || data.candidateData == null || (data.candidateData is string && data.candidateData.size() < 1000000)) &&
+             (!('socioeconomicDictamen' in data) || data.socioeconomicDictamen == null || (data.socioeconomicDictamen is string && data.socioeconomicDictamen.size() < 1000000)) &&
+             (!('identityValidationResult' in data) || data.identityValidationResult == null || (data.identityValidationResult is string && data.identityValidationResult.size() < 100000)) &&
+             (!('creditAnalysisResult' in data) || data.creditAnalysisResult == null || (data.creditAnalysisResult is string && data.creditAnalysisResult.size() < 100000)) &&
+             (!('providerAnalysisResult' in data) || data.providerAnalysisResult == null || (data.providerAnalysisResult is string && data.providerAnalysisResult.size() < 100000)) &&
+             (!('creditStage' in data) || data.creditStage == null || (data.creditStage in ['PRE_QUALIFICATION', 'QUALIFICATION'])) &&
+             (!('isDirect' in data) || data.isDirect is bool) &&
+             (!('score' in data) || data.score is number) &&
+             (!('scoreBreakdown' in data) || data.scoreBreakdown is string) &&
+             isValidDateString(data.createdAt) &&
+             isValidDateString(data.updatedAt);
+    }
+
+    function isValidCandidateLink() {
+      let data = request.resource.data;
+      let allowedFields = ['linkId', 'investigationId', 'clientId', 'clientProfile', 'investigationType', 'investigationScope', 'title', 'status', 'candidateData', 'createdAt', 'updatedAt'];
+      return hasRequiredFields(['linkId', 'investigationId', 'clientId', 'clientProfile', 'title', 'status', 'createdAt', 'updatedAt']) &&
+             hasOnlyAllowedFields(allowedFields) &&
+             data.linkId is string && data.linkId.size() > 0 && data.linkId.size() < 100 &&
+             data.investigationId is string && data.investigationId.size() > 0 && data.investigationId.size() < 100 &&
+             data.clientId is string && data.clientId.size() > 0 && data.clientId.size() < 100 &&
+             data.clientProfile in ['GENERAL', 'HR', 'PROVIDER', 'SOCIOECONOMIC_CREDIT', 'CREDIT'] &&
+             (!('investigationType' in data) || (data.investigationType in ['GENERAL', 'HR', 'PROVIDER', 'SOCIOECONOMIC_CREDIT', 'CREDIT'])) &&
+             (!('investigationScope' in data) || (data.investigationScope in ['SIMPLE', 'INTEGRAL'])) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.status in ['PENDING', 'OPENED', 'PHASE_1_COMPLETED', 'IN_PROGRESS', 'COMPLETED'] &&
+             (!('candidateData' in data) || data.candidateData == null || (data.candidateData is string && data.candidateData.size() < 1000000)) &&
+             isValidDateString(data.createdAt) &&
+             isValidDateString(data.updatedAt);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      // Users can create their own profile (non-admin), or admins can create any user
+      allow create: if isAuthenticated() && 
+                       isValidUser() && 
+                       (
+                         isAdmin() || 
+                         (request.resource.data.uid == request.auth.uid && 
+                          userId == request.auth.uid && 
+                          request.resource.data.role != 'ADMIN')
+                       );
+                       
+      // Users can update their own profile, but cannot change their role, uid, clientType or credits. Admins can update anything.
+      allow update: if isAuthenticated() && 
+                       (
+                         isAdmin() ||
+                         (
+                           isValidUser() && 
+                           isOwner(userId) && 
+                           request.resource.data.uid == resource.data.uid &&
+                           request.resource.data.role == resource.data.role &&
+                           request.resource.data.clientType == resource.data.clientType &&
+                           request.resource.data.get('clientProfile', null) == resource.data.get('clientProfile', null) &&
+                           // Allow decrementing credits by exactly 1, or keeping them the same
+                           (request.resource.data.credits == resource.data.credits || 
+                            request.resource.data.credits == resource.data.credits - 1) &&
+                           // Allow decrementing pagaresCredits by exactly 1, or keeping them the same
+                           (request.resource.data.get('pagaresCredits', 0) == resource.data.get('pagaresCredits', 0) || 
+                            request.resource.data.get('pagaresCredits', 0) == resource.data.get('pagaresCredits', 0) - 1)
+                         )
+                       );
+                       
+      allow delete: if isAdmin();
+    }
+
+    match /cases/{caseId} {
+      allow read: if isDocOwner() || isAdmin();
+      
+      allow create: if isAuthenticated() && 
+                       isValidCase() && 
+                       request.resource.data.ownerUid == request.auth.uid;
+                       
+      allow update: if isAuthenticated() && 
+                       isValidCase() && 
+                       (
+                         (isDocOwner() && 
+                          request.resource.data.ownerUid == resource.data.ownerUid &&
+                          request.resource.data.createdAt == resource.data.createdAt) || 
+                         isAdmin()
+                       );
+                       
+      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.ownerUid || isAdmin());
+    }
+
+    match /clients/{clientId} {
+      allow read: if true; // Public read for business rules
+      allow create: if isAuthenticated() && (request.auth.uid == clientId || isAdmin());
+      allow update: if isAuthenticated() && (request.auth.uid == clientId || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /investigations/{investigationId} {
+      allow get: if true;
+      allow list: if isAuthenticated() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['EJECUTIVO_VENTAS', 'ANALISTA_MESA_CONTROL', 'GERENTE_DIRECTIVO', 'ANALISTA_CREDITO', 'INVESTIGADOR_SOCIAL', 'REVISOR_RRHH', 'INVESTIGADOR'] ||
+        (resource.data.clientId == request.auth.uid)
+      );
+      
+      // Client can create if they are the clientId. Admin can create for anyone.
+      allow create: if isAuthenticated() && 
+                       isValidInvestigation() && 
+                       (
+                         (request.resource.data.clientId == request.auth.uid && request.resource.data.requestedBy == request.auth.uid) || 
+                         isAdmin()
+                       );
+                       
+      allow update: if (
+                         isAuthenticated() && 
+                         isValidInvestigation() && 
+                         (
+                           isAdmin() || 
+                           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'INVESTIGADOR' ||
+                           (request.auth.uid == resource.data.clientId && request.resource.data.clientId == resource.data.clientId && request.resource.data.createdAt == resource.data.createdAt)
+                         )
+                       ) || (
+                         isValidInvestigation() &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'linkStatus', 'candidateData', 'socioeconomicDictamen', 'result', 'identityValidationResult', 'creditAnalysisResult', 'providerAnalysisResult', 'uploadedFileUrls', 'updatedAt']) &&
+                         request.resource.data.get('candidateLink', null) == resource.data.get('candidateLink', null)
+                       );
+                       
+      allow delete: if isAdmin();
+    }
+
+    match /pricing_plans/{planId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() && isValidPricingPlan();
+    }
+
+    match /candidate_links/{linkId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidCandidateLink();
+      allow update: if isValidCandidateLink() && 
+                       request.resource.data.linkId == resource.data.linkId &&
+                       request.resource.data.investigationId == resource.data.investigationId &&
+                       request.resource.data.clientId == resource.data.clientId &&
+                       request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
+    }
+
+    match /pre_registered_users/{email} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /user_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /user_ia_configs/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}

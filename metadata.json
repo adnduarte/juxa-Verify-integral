@@ -1,0 +1,8 @@
+{
+  "name": "JUXA VERIFY",
+  "description": "Plataforma avanzada de investigación y validación de identidad, crédito y proveedores con IA.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
