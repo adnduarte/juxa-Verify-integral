@@ -13,7 +13,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
@@ -25,7 +25,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
   }
 
   if (allowedRoles && role && !allowedRoles.includes(role)) {
-    // Redirect to unauthorized or home if role is not allowed
+    // Rutas /admin* solo para ADMIN/SUPERVISOR: mandar al panel en lugar de pantalla de error
+    if (location.pathname === '/admin' || location.pathname.startsWith('/admin/')) {
+      return <Navigate to="/dashboard" replace />;
+    }
     return <Navigate to="/unauthorized" replace />;
   }
 

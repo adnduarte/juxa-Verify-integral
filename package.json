@@ -4,11 +4,20 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
+    "dev": "vite --port=5177",
+    "dev:host": "vite --port=5177 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "seed:demo": "node scripts/seed-demo.mjs",
+    "seed:loong": "node scripts/seed-demo.mjs --loong-only",
+    "seed:check": "node scripts/check-seed-env.mjs",
+    "firebase:ayuda-config": "node scripts/mostrar-config-firebase-ayuda.mjs",
+    "deploy:rules": "npx firebase deploy --only firestore:rules,firestore:indexes,storage",
+    "deploy:storage": "npx firebase deploy --only storage",
+    "deploy:firestore-rules": "npx firebase deploy --only firestore:rules",
+    "deploy:firestore-indexes": "npx firebase deploy --only firestore:indexes"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
@@ -39,6 +48,8 @@
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
+    "firebase-admin": "^13.7.0",
+    "firebase-tools": "^14.24.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

@@ -148,60 +148,60 @@ export const IAConfigPanel: React.FC = () => {
   return (
     <div className="space-y-8 max-w-4xl">
       {/* Ponderaciones Section */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-900 mb-2 flex items-center">
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2 flex items-center">
           <Bot className="w-5 h-5 mr-2 text-blue-600" />
           Ponderaciones de Dictamen IA
         </h3>
-        <p className="text-sm text-slate-500 mb-6">
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
           Define la importancia de cada módulo en el cálculo del score final de riesgo para tus solicitudes.
         </p>
 
         <div className="space-y-6">
           <div>
             <div className="flex justify-between mb-1">
-              <label className="block text-sm font-medium text-slate-700">Ingresos y Capacidad de Pago</label>
-              <span className="text-sm font-bold text-slate-900">{weights.income}%</span>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">Ingresos y Capacidad de Pago</label>
+              <span className="text-sm font-bold text-slate-900 dark:text-slate-100">{weights.income}%</span>
             </div>
             <input 
               type="range" 
               min="0" max="100" 
               value={weights.income} 
               onChange={(e) => setWeights({...weights, income: parseInt(e.target.value)})}
-              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
             />
           </div>
 
           <div>
             <div className="flex justify-between mb-1">
-              <label className="block text-sm font-medium text-slate-700">Ubicación y Arraigo (GPS/Fachada)</label>
-              <span className="text-sm font-bold text-slate-900">{weights.location}%</span>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">Ubicación y Arraigo (GPS/Fachada)</label>
+              <span className="text-sm font-bold text-slate-900 dark:text-slate-100">{weights.location}%</span>
             </div>
             <input 
               type="range" 
               min="0" max="100" 
               value={weights.location} 
               onChange={(e) => setWeights({...weights, location: parseInt(e.target.value)})}
-              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
             />
           </div>
 
           <div>
             <div className="flex justify-between mb-1">
-              <label className="block text-sm font-medium text-slate-700">Documentación y Autenticidad</label>
-              <span className="text-sm font-bold text-slate-900">{weights.documents}%</span>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">Documentación y Autenticidad</label>
+              <span className="text-sm font-bold text-slate-900 dark:text-slate-100">{weights.documents}%</span>
             </div>
             <input 
               type="range" 
               min="0" max="100" 
               value={weights.documents} 
               onChange={(e) => setWeights({...weights, documents: parseInt(e.target.value)})}
-              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
             />
           </div>
 
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-slate-500">Total:</span>
+            <span className="text-slate-500 dark:text-slate-400">Total:</span>
             <span className={`font-bold ${total === 100 ? 'text-emerald-600' : 'text-red-600'}`}>
               {total}%
             </span>
@@ -215,61 +215,61 @@ export const IAConfigPanel: React.FC = () => {
       </div>
 
       {/* Scoring Configuration Section */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-900 mb-2 flex items-center">
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2 flex items-center">
           <CreditCard className="w-5 h-5 mr-2 text-emerald-600" />
           Configuración de Scoring Inteligente
         </h3>
-        <p className="text-sm text-slate-500 mb-6">
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
           Ajusta los parámetros que la IA utilizará para calcular el puntaje de crédito de los candidatos.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Ingreso Mínimo Mensual ($)</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Ingreso Mínimo Mensual ($)</label>
             <input 
               type="number" 
               value={scoringConfig.minIncome} 
               onChange={(e) => setScoringConfig({...scoringConfig, minIncome: parseInt(e.target.value)})}
-              className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+              className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
             />
-            <p className="text-[10px] text-slate-400 mt-1">Sugerencia: $5,000 - $15,000 según el tipo de crédito.</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Sugerencia: $5,000 - $15,000 según el tipo de crédito.</p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Distancia Máxima Permitida (m)</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Distancia Máxima Permitida (m)</label>
             <input 
               type="number" 
               value={scoringConfig.maxDistance} 
               onChange={(e) => setScoringConfig({...scoringConfig, maxDistance: parseInt(e.target.value)})}
-              className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+              className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
             />
-            <p className="text-[10px] text-slate-400 mt-1">Sugerencia: 150m para alta precisión, 500m para zonas rurales.</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Sugerencia: 150m para alta precisión, 500m para zonas rurales.</p>
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-slate-700 mb-1">Documentos Obligatorios (Separados por coma)</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Documentos Obligatorios (Separados por coma)</label>
             <input 
               type="text" 
               value={scoringConfig.requiredDocs.join(', ')} 
               onChange={(e) => setScoringConfig({...scoringConfig, requiredDocs: e.target.value.split(',').map(s => s.trim())})}
-              className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+              className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
             />
-            <p className="text-[10px] text-slate-400 mt-1">Ej: INE, Comprobante de Domicilio, Comprobante de Ingresos, Referencias.</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Ej: INE, Comprobante de Domicilio, Comprobante de Ingresos, Referencias.</p>
           </div>
         </div>
       </div>
 
       {/* Business Rules Section */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center">
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center">
           <ShieldCheck className="w-5 h-5 mr-2 text-indigo-600" />
           Políticas y Reglas de Negocio
         </h3>
         
         <div className="space-y-6">
           <div>
-            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">
               <ShieldCheck className="w-4 h-4 text-blue-600" />
               Políticas Generales del Despacho / Empresa
             </label>
@@ -277,38 +277,38 @@ export const IAConfigPanel: React.FC = () => {
               value={policies.politicasGenerales}
               onChange={(e) => setPolicies({...policies, politicasGenerales: e.target.value})}
               placeholder="Ej: Duarte-Aupart Abogados prioriza la veracidad de la información y el arraigo domiciliario..."
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm min-h-[100px] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+              className="w-full px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-xl text-sm min-h-[100px] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
             />
           </div>
 
           <div>
-            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
-              <CreditCard className="w-4 h-4 text-slate-400" />
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">
+              <CreditCard className="w-4 h-4 text-slate-400 dark:text-slate-500" />
               Políticas para Originación de Crédito
             </label>
             <textarea
               value={policies.creditPolicies}
               onChange={(e) => setPolicies({...policies, creditPolicies: e.target.value})}
               placeholder="Ej: No aprobar si el DTI es mayor al 40%. Requiere antigüedad laboral mínima de 1 año..."
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm min-h-[100px] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+              className="w-full px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-xl text-sm min-h-[100px] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
             />
           </div>
 
           <div>
-            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
-              <Users className="w-4 h-4 text-slate-400" />
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">
+              <Users className="w-4 h-4 text-slate-400 dark:text-slate-500" />
               Políticas para Estudio Socioeconómico (General)
             </label>
             <textarea
               value={policies.socioeconomicPolicies}
               onChange={(e) => setPolicies({...policies, socioeconomicPolicies: e.target.value})}
               placeholder="Ej: Validar congruencia entre ingresos declarados y entorno físico. Verificar referencias vecinales..."
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm min-h-[100px] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+              className="w-full px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-xl text-sm min-h-[100px] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
             />
           </div>
 
           <div>
-            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">
               <Users className="w-4 h-4 text-emerald-500" />
               Políticas para Estudio Socioeconómico (Recursos Humanos)
             </label>
@@ -316,12 +316,12 @@ export const IAConfigPanel: React.FC = () => {
               value={policies.hrPolicies}
               onChange={(e) => setPolicies({...policies, hrPolicies: e.target.value})}
               placeholder="Ej: Priorizar honestidad en trayectoria laboral. Validar que no existan demandas laborales previas..."
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm min-h-[100px] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+              className="w-full px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-xl text-sm min-h-[100px] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
             />
           </div>
 
           <div>
-            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">
               <Building2 className="w-4 h-4 text-blue-500" />
               Políticas para Crédito Bancario / Financiero
             </label>
@@ -329,7 +329,7 @@ export const IAConfigPanel: React.FC = () => {
               value={policies.bankingPolicies}
               onChange={(e) => setPolicies({...policies, bankingPolicies: e.target.value})}
               placeholder="Ej: Score crediticio mínimo de 650 puntos. Verificación exhaustiva de capacidad de pago..."
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm min-h-[100px] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+              className="w-full px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-xl text-sm min-h-[100px] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
             />
           </div>
         </div>

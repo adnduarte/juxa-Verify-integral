@@ -1,10 +1,16 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { GlobalErrorBoundary } from './components/GlobalErrorBoundary';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <GlobalErrorBoundary>
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    </GlobalErrorBoundary>
   </StrictMode>,
 );

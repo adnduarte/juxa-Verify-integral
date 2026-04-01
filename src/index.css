@@ -1,33 +1,101 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/**
+ * Design tokens — legaltech SaaS (acento índigo). Variante Loong: html[data-tenant="loong"].
+ * Landing y app autenticada deben usar estas variables o shellClasses en brand.ts.
+ */
+:root {
+  --color-juxa-accent: #4f46e5;
+  --color-juxa-accent-hover: #4338ca;
+  --color-juxa-accent-foreground: #ffffff;
+  --color-juxa-accent-muted: color-mix(in srgb, #4f46e5 12%, transparent);
+  --color-juxa-surface-page: #f8fafc;
+  --color-juxa-surface-elevated: #ffffff;
+  --juxa-radius-card: 1rem;
+  --juxa-radius-shell: 0.75rem;
+  --juxa-shadow-card: 0 1px 3px rgb(15 23 42 / 0.06), 0 12px 40px rgb(15 23 42 / 0.05);
+  --juxa-selection: color-mix(in srgb, #4f46e5 22%, transparent);
+}
+
+.dark {
+  --color-juxa-accent: #6366f1;
+  --color-juxa-accent-hover: #818cf8;
+  --color-juxa-accent-foreground: #ffffff;
+  --color-juxa-accent-muted: color-mix(in srgb, #6366f1 16%, transparent);
+  --color-juxa-surface-page: #020617;
+  --color-juxa-surface-elevated: #0f172a;
+  --juxa-shadow-card: 0 12px 40px rgb(0 0 0 / 0.35);
+  --juxa-selection: color-mix(in srgb, #6366f1 28%, transparent);
+}
+
+html[data-tenant="loong"] {
+  --color-juxa-accent: #059669;
+  --color-juxa-accent-hover: #047857;
+  --color-juxa-accent-muted: color-mix(in srgb, #059669 14%, transparent);
+  --juxa-selection: color-mix(in srgb, #059669 22%, transparent);
+}
+
+html.dark[data-tenant="loong"] {
+  --color-juxa-accent: #34d399;
+  --color-juxa-accent-hover: #6ee7b7;
+  --color-juxa-accent-muted: color-mix(in srgb, #34d399 18%, transparent);
+  --juxa-selection: color-mix(in srgb, #34d399 26%, transparent);
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .font-display {
+    font-family: 'Source Serif 4', ui-serif, Georgia, 'Times New Roman', serif;
+    font-optical-sizing: auto;
+  }
+}
+
+@layer utilities {
+  .juxa-surface-page {
+    background-color: var(--color-juxa-surface-page);
+  }
+  .juxa-selection {
+    &::selection {
+      background-color: var(--juxa-selection);
+    }
+  }
+}
+
 @media print {
   .no-print {
     display: none !important;
   }
-  
+
   body {
     background: white !important;
     color: black !important;
   }
-  
+
   .prose {
     max-width: none !important;
   }
-  
+
   .prose * {
     color: black !important;
   }
-  
-  .bg-neutral-900, .bg-neutral-950, .bg-black {
+
+  .bg-neutral-900,
+  .bg-neutral-950,
+  .bg-black {
     background: white !important;
     color: black !important;
     border: 1px solid #ccc !important;
   }
-  
+
   .text-white {
     color: black !important;
   }
-  
+
   .border-neutral-800 {
     border-color: #ccc !important;
   }

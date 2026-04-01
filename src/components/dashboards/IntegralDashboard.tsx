@@ -1,21 +1,38 @@
-import React, { useState } from 'react';
-import { ShieldCheck, FileText, Settings, Zap, Edit3, CheckCircle2, FileSignature, Plus, ArrowRight, SkipForward, Bot, Search, RefreshCw } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { ShieldCheck, FileText, Settings, Zap, Edit3, CheckCircle2, FileSignature, Plus, ArrowRight, SkipForward, Bot, Search, RefreshCw, MessageCircle, LifeBuoy } from 'lucide-react';
 import { DashboardLayout } from './DashboardLayout';
 import { IAConfigPanel } from './IAConfigPanel';
+import { useAuthStatus } from '../../contexts/AuthContext';
+import { LoongWorkspaceChatTab } from '../loong/LoongWorkspaceChatTab';
+import { LoongSupportTicketsTab } from '../loong/LoongSupportTicketsTab';
+import { FEATURE_WORKSPACE_CHAT_TICKETS } from '../../config/features';
 
 export const IntegralDashboard: React.FC = () => {
+  const { organizationId, user, role } = useAuthStatus();
   const [activeTab, setActiveTab] = useState('origination');
   const [currentStep, setCurrentStep] = useState(1);
 
-  const sidebarItems = [
-    { id: 'origination', label: 'Originación de Crédito', icon: Zap },
-    { id: 'investigations', label: 'Investigaciones', icon: Search },
-    { id: 'analysis', label: 'Motor de Análisis', icon: ShieldCheck },
-    { id: 'validation', label: 'Validación Electrónica', icon: CheckCircle2 },
-    { id: 'pagare', label: 'Originación de Pagaré', icon: FileSignature },
-    { id: 'rules', label: 'Reglas Adaptables', icon: Settings },
-    { id: 'ia-config', label: 'Configuración IA', icon: Bot },
-  ];
+  const sidebarItems = useMemo(() => {
+    const all = [
+      { id: 'origination', label: 'Originación de Crédito', icon: Zap },
+      { id: 'investigations', label: 'Investigaciones', icon: Search },
+      { id: 'analysis', label: 'Motor de Análisis', icon: ShieldCheck },
+      { id: 'validation', label: 'Validación Electrónica', icon: CheckCircle2 },
+      { id: 'pagare', label: 'Originación de Pagaré', icon: FileSignature },
+      { id: 'rules', label: 'Reglas Adaptables', icon: Settings },
+      { id: 'chat', label: 'Chat', icon: MessageCircle },
+      { id: 'tickets', label: 'Soporte / tickets', icon: LifeBuoy },
+      { id: 'ia-config', label: 'Configuración IA', icon: Bot },
+    ];
+    if (FEATURE_WORKSPACE_CHAT_TICKETS) return all;
+    return all.filter((i) => i.id !== 'chat' && i.id !== 'tickets');
+  }, []);
+
+  useEffect(() => {
+    if (!FEATURE_WORKSPACE_CHAT_TICKETS && (activeTab === 'chat' || activeTab === 'tickets')) {
+      setActiveTab('origination');
+    }
+  }, [activeTab]);
 
   const handleNextStep = () => {
     if (currentStep < 3) setCurrentStep(currentStep + 1);
@@ -45,7 +62,7 @@ export const IntegralDashboard: React.FC = () => {
       {activeTab === 'origination' && (
         <div>
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-slate-900">Originación de Crédito</h2>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Originación de Crédito</h2>
             <div className="flex gap-2">
               <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold uppercase tracking-wider">Servicio Integral</span>
             </div>
@@ -53,7 +70,7 @@ export const IntegralDashboard: React.FC = () => {
           
           {/* Stepper */}
           <div className="flex items-center justify-between mb-8 relative">
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-slate-200 z-0"></div>
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-slate-200 dark:bg-slate-700 z-0"></div>
             <div className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-blue-600 z-0 transition-all duration-500" style={{ width: `${(currentStep - 1) * 50}%` }}></div>
             
             {[
@@ -63,11 +80,11 @@ export const IntegralDashboard: React.FC = () => {
             ].map((s) => (
               <div key={s.step} className="relative z-10 flex flex-col items-center">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${
-                  currentStep >= s.step ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-slate-400'
+                  currentStep >= s.step ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500'
                 }`}>
                   <s.icon className="w-5 h-5" />
                 </div>
-                <span className={`mt-2 text-xs font-medium ${currentStep >= s.step ? 'text-blue-600' : 'text-slate-500'}`}>
+                <span className={`mt-2 text-xs font-medium ${currentStep >= s.step ? 'text-blue-600' : 'text-slate-500 dark:text-slate-400'}`}>
                   {s.label}
                 </span>
               </div>
@@ -75,24 +92,24 @@ export const IntegralDashboard: React.FC = () => {
           </div>
 
           {/* Step Content */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm">
             {currentStep === 1 && (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
                     <ShieldCheck className="w-6 h-6" />
                   </div>
-                  <h3 className="text-lg font-bold text-slate-900">Motor de Análisis de Crédito</h3>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Motor de Análisis de Crédito</h3>
                 </div>
-                <p className="text-slate-600 mb-6">El motor está evaluando el perfil del solicitante basado en las reglas adaptables configuradas.</p>
+                <p className="text-slate-600 dark:text-slate-300 mb-6">El motor está evaluando el perfil del solicitante basado en las reglas adaptables configuradas.</p>
                 
                 <div className="space-y-4 mb-6">
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
-                    <span className="text-sm font-medium text-slate-700">Score Crediticio</span>
+                  <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Score Crediticio</span>
                     <span className="text-lg font-bold text-emerald-600">750 (Aprobado)</span>
                   </div>
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
-                    <span className="text-sm font-medium text-slate-700">Capacidad de Pago</span>
+                  <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Capacidad de Pago</span>
                     <span className="text-lg font-bold text-emerald-600">Suficiente</span>
                   </div>
                 </div>
@@ -112,12 +129,12 @@ export const IntegralDashboard: React.FC = () => {
                   <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
                     <CheckCircle2 className="w-6 h-6" />
                   </div>
-                  <h3 className="text-lg font-bold text-slate-900">Solicitud de Validación Electrónica</h3>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Solicitud de Validación Electrónica</h3>
                 </div>
-                <p className="text-slate-600 mb-6">Se enviará una solicitud al cliente para validar su identidad electrónicamente.</p>
+                <p className="text-slate-600 dark:text-slate-300 mb-6">Se enviará una solicitud al cliente para validar su identidad electrónicamente.</p>
                 
                 <div className="flex flex-col sm:flex-row gap-3 justify-end mt-8">
-                  <button onClick={handleSkipValidation} className="flex items-center justify-center gap-2 px-6 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors">
+                  <button onClick={handleSkipValidation} className="flex items-center justify-center gap-2 px-6 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 rounded-lg font-medium hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
                     <SkipForward className="w-4 h-4" />
                     Saltar este paso
                   </button>
@@ -135,14 +152,14 @@ export const IntegralDashboard: React.FC = () => {
                   <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
                     <FileSignature className="w-6 h-6" />
                   </div>
-                  <h3 className="text-lg font-bold text-slate-900">Originación del Pagaré</h3>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Originación del Pagaré</h3>
                 </div>
-                <p className="text-slate-600 mb-6">El crédito ha sido aprobado y validado. Procede a generar el pagaré electrónico.</p>
+                <p className="text-slate-600 dark:text-slate-300 mb-6">El crédito ha sido aprobado y validado. Procede a generar el pagaré electrónico.</p>
                 
-                <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl mb-6 text-center">
-                  <FileSignature className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                  <h4 className="font-medium text-slate-900 mb-1">Pagaré Listo para Generar</h4>
-                  <p className="text-sm text-slate-500">Monto: $50,000 MXN | Plazo: 12 meses</p>
+                <div className="p-6 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl mb-6 text-center">
+                  <FileSignature className="w-12 h-12 text-slate-400 dark:text-slate-500 mx-auto mb-3" />
+                  <h4 className="font-medium text-slate-900 dark:text-slate-100 mb-1">Pagaré Listo para Generar</h4>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Monto: $50,000 MXN | Plazo: 12 meses</p>
                 </div>
 
                 <div className="flex justify-end">
@@ -160,8 +177,8 @@ export const IntegralDashboard: React.FC = () => {
       {activeTab === 'investigations' && (
         <div>
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-slate-900">Panel de Investigaciones</h2>
-            <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Panel de Investigaciones</h2>
+            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
               <RefreshCw className="w-4 h-4" />
               Actualizar
             </button>
@@ -173,28 +190,28 @@ export const IntegralDashboard: React.FC = () => {
               { id: 'INV-002', candidate: 'Lucía Fernández', type: 'Laboral', status: 'IN_PROGRESS', date: '2026-03-22' },
               { id: 'INV-003', candidate: 'Marcos Rivas', type: 'Integral', status: 'PENDING', date: '2026-03-24' },
             ].map((inv) => (
-              <div key={inv.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between hover:border-blue-300 transition-colors cursor-pointer group">
+              <div key={inv.id} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between hover:border-blue-300 transition-colors cursor-pointer group">
                 <div className="flex items-center gap-4">
                   <div className={`p-3 rounded-xl ${
                     inv.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600' :
                     inv.status === 'IN_PROGRESS' ? 'bg-blue-50 text-blue-600' :
-                    'bg-slate-50 text-slate-400'
+                    'bg-slate-50 dark:bg-slate-950 text-slate-400 dark:text-slate-500'
                   }`}>
                     <Search className="w-5 h-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-slate-900">{inv.candidate}</h3>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{inv.id}</span>
+                      <h3 className="font-bold text-slate-900 dark:text-slate-100">{inv.candidate}</h3>
+                      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{inv.id}</span>
                     </div>
-                    <p className="text-xs text-slate-500">{inv.type} • Solicitado el {inv.date}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{inv.type} • Solicitado el {inv.date}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                     inv.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
                     inv.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
-                    'bg-slate-100 text-slate-600'
+                    'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                   }`}>
                     {inv.status === 'COMPLETED' ? 'Completado' :
                      inv.status === 'IN_PROGRESS' ? 'En Progreso' : 'Pendiente'}
@@ -211,8 +228,8 @@ export const IntegralDashboard: React.FC = () => {
                 <Zap className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-900 mb-1">¿Listo para originar?</h3>
-                <p className="text-sm text-slate-600 mb-4">Una vez completada la investigación, puedes iniciar el flujo de originación de crédito con un solo clic.</p>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-1">¿Listo para originar?</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">Una vez completada la investigación, puedes iniciar el flujo de originación de crédito con un solo clic.</p>
                 <button 
                   onClick={() => setActiveTab('origination')}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
@@ -227,30 +244,43 @@ export const IntegralDashboard: React.FC = () => {
       
       {activeTab === 'analysis' && (
         <div>
-          <h2 className="text-xl font-bold text-slate-900 mb-4">Motor de Análisis de Crédito</h2>
-          <p className="text-slate-600">Resultados del análisis en tiempo real basados en las reglas adaptables.</p>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-4">Motor de Análisis de Crédito</h2>
+          <p className="text-slate-600 dark:text-slate-300">Resultados del análisis en tiempo real basados en las reglas adaptables.</p>
         </div>
       )}
 
       {activeTab === 'validation' && (
         <div>
-          <h2 className="text-xl font-bold text-slate-900 mb-4">Validación Electrónica</h2>
-          <p className="text-slate-600 mb-4">Solicitudes enviadas para validación de identidad y firma electrónica.</p>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-4">Validación Electrónica</h2>
+          <p className="text-slate-600 dark:text-slate-300 mb-4">Solicitudes enviadas para validación de identidad y firma electrónica.</p>
         </div>
       )}
 
       {activeTab === 'pagare' && (
         <div>
-          <h2 className="text-xl font-bold text-slate-900 mb-4">Originación de Pagaré</h2>
-          <p className="text-slate-600">Generación y firma de pagarés electrónicos vinculados a las originaciones aprobadas.</p>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-4">Originación de Pagaré</h2>
+          <p className="text-slate-600 dark:text-slate-300">Generación y firma de pagarés electrónicos vinculados a las originaciones aprobadas.</p>
         </div>
       )}
 
       {activeTab === 'rules' && (
         <div>
-          <h2 className="text-xl font-bold text-slate-900 mb-4">Reglas Adaptables</h2>
-          <p className="text-slate-600">Configura los parámetros de riesgo, montos máximos, y flujos de aprobación.</p>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-4">Reglas Adaptables</h2>
+          <p className="text-slate-600 dark:text-slate-300">Configura los parámetros de riesgo, montos máximos, y flujos de aprobación.</p>
         </div>
+      )}
+
+      {FEATURE_WORKSPACE_CHAT_TICKETS && activeTab === 'chat' && user && role && (
+        <LoongWorkspaceChatTab
+          organizationId={organizationId}
+          userUid={user.uid}
+          userEmail={user.email ?? null}
+          role={role}
+        />
+      )}
+
+      {FEATURE_WORKSPACE_CHAT_TICKETS && activeTab === 'tickets' && user && role && (
+        <LoongSupportTicketsTab organizationId={organizationId} userUid={user.uid} role={role} />
       )}
 
       {activeTab === 'ia-config' && (

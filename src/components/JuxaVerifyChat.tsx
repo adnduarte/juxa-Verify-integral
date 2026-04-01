@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Loader2, Brain, Sparkles } from 'lucide-react';
 import { chatWithJuxaVerify } from '../lib/gemini';
+import { db } from '../firebase';
+import { buildLoongMotorOfficialAnalysisInjection } from '../lib/loongMotorPolicyFirestore';
 import ReactMarkdown from 'react-markdown';
 
 interface Message {
@@ -16,7 +18,27 @@ export const JuxaVerifyChat: React.FC<JuxaVerifyChatProps> = ({ investigation })
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loongPolicyAppendix, setLoongPolicyAppendix] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (investigation?.clientProfile !== 'LOONG_MOTOR') {
+      setLoongPolicyAppendix('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const text = await buildLoongMotorOfficialAnalysisInjection(db, investigation.organizationId ?? null);
+        if (!cancelled) setLoongPolicyAppendix(text);
+      } catch {
+        if (!cancelled) setLoongPolicyAppendix('');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [investigation?.clientProfile, investigation?.organizationId]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -34,7 +56,12 @@ export const JuxaVerifyChat: React.FC<JuxaVerifyChatProps> = ({ investigation })
     setIsLoading(true);
 
     try {
-      const response = await chatWithJuxaVerify(messages, userMessage, investigation);
+      const response = await chatWithJuxaVerify(
+        messages,
+        userMessage,
+        investigation,
+        loongPolicyAppendix || undefined
+      );
       setMessages(prev => [...prev, { role: 'model', text: response || 'No se pudo obtener respuesta.' }]);
     } catch (error) {
       console.error('Chat error:', error);
@@ -45,7 +72,7 @@ export const JuxaVerifyChat: React.FC<JuxaVerifyChatProps> = ({ investigation })
   };
 
   return (
-    <div className="flex flex-col h-[500px] bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className="flex flex-col h-[500px] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
       {/* Header */}
       <div className="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -63,15 +90,15 @@ export const JuxaVerifyChat: React.FC<JuxaVerifyChatProps> = ({ investigation })
       {/* Messages */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50"
+        className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50 dark:bg-slate-950/50"
       >
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center p-6">
             <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mb-3">
               <Brain className="w-6 h-6 text-blue-600" />
             </div>
-            <h4 className="text-sm font-bold text-slate-900 mb-1">¿En qué puedo ayudarte hoy?</h4>
-            <p className="text-xs text-slate-500 max-w-[200px]">
+            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">¿En qué puedo ayudarte hoy?</h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-[200px]">
               Pregúntame sobre el riesgo crediticio, estabilidad laboral o cualquier detalle de esta investigación.
             </p>
           </div>
@@ -84,14 +111,14 @@ export const JuxaVerifyChat: React.FC<JuxaVerifyChatProps> = ({ investigation })
           >
             <div className={`max-w-[85%] flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
               <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center ${
-                msg.role === 'user' ? 'bg-slate-200' : 'bg-blue-600'
+                msg.role === 'user' ? 'bg-slate-200 dark:bg-slate-700' : 'bg-blue-600'
               }`}>
-                {msg.role === 'user' ? <User className="w-3.5 h-3.5 text-slate-600" /> : <Bot className="w-3.5 h-3.5 text-white" />}
+                {msg.role === 'user' ? <User className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" /> : <Bot className="w-3.5 h-3.5 text-white" />}
               </div>
               <div className={`p-3 rounded-2xl text-sm ${
                 msg.role === 'user' 
                   ? 'bg-slate-900 text-white rounded-tr-none' 
-                  : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm'
+                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-tl-none shadow-sm'
               }`}>
                 <div className="markdown-body">
                   <ReactMarkdown>{msg.text}</ReactMarkdown>
@@ -107,7 +134,7 @@ export const JuxaVerifyChat: React.FC<JuxaVerifyChatProps> = ({ investigation })
               <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center">
                 <Bot className="w-3.5 h-3.5 text-white" />
               </div>
-              <div className="p-3 bg-white border border-slate-200 rounded-2xl rounded-tl-none shadow-sm">
+              <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-none shadow-sm">
                 <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
               </div>
             </div>
@@ -116,13 +143,13 @@ export const JuxaVerifyChat: React.FC<JuxaVerifyChatProps> = ({ investigation })
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSend} className="p-3 bg-white border-t border-slate-100 flex gap-2">
+      <form onSubmit={handleSend} className="p-3 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-2">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Escribe tu duda sobre este caso..."
-          className="flex-1 px-4 py-2 bg-slate-100 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-800 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
         />
         <button
           type="submit"

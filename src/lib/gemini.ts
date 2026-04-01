@@ -1,6 +1,24 @@
 import { GoogleGenAI } from '@google/genai';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+function resolveGeminiApiKey(): string {
+  // Vite/browser: only exposes env vars prefixed with VITE_
+  const fromVite = (import.meta as any)?.env?.VITE_GEMINI_API_KEY;
+  if (typeof fromVite === 'string' && fromVite.trim()) return fromVite.trim();
+  return '';
+}
+
+let _ai: GoogleGenAI | null = null;
+function getAiClient(): GoogleGenAI {
+  if (_ai) return _ai;
+  const apiKey = resolveGeminiApiKey();
+  if (!apiKey) {
+    throw new Error(
+      'Falta configurar la API Key de Gemini. Define `VITE_GEMINI_API_KEY` en tu `.env.local` (Vite) y reinicia el servidor.'
+    );
+  }
+  _ai = new GoogleGenAI({ apiKey });
+  return _ai;
+}
 
 // FUNCIÓN MÁGICA DE CONVERSIÓN (Detecta PDF y limpia Base64)
 export async function urlToGenerativePart(url: string | null) {
@@ -63,7 +81,14 @@ export async function urlToGenerativePart(url: string | null) {
   }
 }
 
-export async function analyzeCandidateData(candidateData: any, imageParts: (File | Blob | string | null)[], businessRules?: string, simulationType: string = 'none', scoringConfig?: any) {
+export async function analyzeCandidateData(
+  candidateData: any,
+  imageParts: (File | Blob | string | null)[],
+  businessRules?: string,
+  simulationType: string = 'none',
+  scoringConfig?: any,
+  supplementaryOriginationBlock?: string
+) {
   let rawText = '';
   try {
     if (simulationType === 'positive' || simulationType === 'negative') {
@@ -141,9 +166,27 @@ export async function analyzeCandidateData(candidateData: any, imageParts: (File
           - ¿Hay señales de alerta sobre la estabilidad domiciliaria?
         `;
         break;
+      case 'LOONG_MOTOR':
+        promptContext = `
+          OBJETIVO: Investigación / precalificación crédito MOTOCICLETA — Loong Motor (México).
+          Combina análisis de capacidad de pago, congruencia domiciliaria y riesgos propios del activo (robo, uso, LTV).
+          Cruza ingresos declarados con entorno observado y con las políticas numéricas y de cobranza provistas abajo.
+          Tipo de crédito: ${candidateData.tipoCredito || 'Crédito moto'}.
+          Datos financieros declarados: capital ${candidateData.montoCreditoCapital || 'N/A'}, plazo ${candidateData.plazoFinanciamiento || 'N/A'}.
+        `;
+        break;
       default:
         promptContext = "Realiza un análisis general de congruencia entre los datos declarados y la evidencia visual.";
     }
+
+    const originationInjection =
+      supplementaryOriginationBlock && supplementaryOriginationBlock.trim()
+        ? `
+
+POLÍTICAS DE ORIGINACIÓN Y COBRANZA (CONFIGURACIÓN DEL SISTEMA — CUMPLIR EN EL DICTAMEN):
+${supplementaryOriginationBlock.trim()}
+`
+        : '';
 
     const basePrompt = `
       Actúa como un Auditor Senior Experto. Realiza una auditoría forense de la evidencia adjunta.
@@ -152,7 +195,7 @@ export async function analyzeCandidateData(candidateData: any, imageParts: (File
 
       REGLAS DE NEGOCIO DEL CLIENTE (APLICAR ESTRICTAMENTE):
       ${businessRules ? businessRules : "No hay reglas específicas adicionales. Aplica criterio estándar."}
-
+      ${originationInjection}
       INSTRUCCIÓN ESPECIAL DE GEOLOCALIZACIÓN:
       Verifica si la descripción arquitectónica u observaciones visuales de la Foto de Fachada subida tienen congruencia con un entorno urbano lógico, considerando las coordenadas proporcionadas en los datos declarados.
 
@@ -206,7 +249,7 @@ export async function analyzeCandidateData(candidateData: any, imageParts: (File
 
     contents.push({ text: basePrompt });
 
-    const response = await ai.models.generateContent({
+    const response = await getAiClient().models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: [{ role: 'user', parts: contents }],
       config: {
@@ -242,7 +285,7 @@ export async function analyzeCandidateData(candidateData: any, imageParts: (File
 };
 
 export const generateConceptImage = async (prompt: string, aspectRatio: string) => {
-  const response = await ai.models.generateContent({
+  const response = await getAiClient().models.generateContent({
     model: 'gemini-3.1-flash-image-preview',
     contents: prompt,
     config: {
@@ -290,7 +333,7 @@ Módulo 5: Parrilla de Contenidos (Calendario)`;
   }));
   contents.push({ role: 'user', parts: [{ text: message }] });
 
-  const response = await ai.models.generateContent({
+  const response = await getAiClient().models.generateContent({
     model: 'gemini-3.1-pro-preview',
     contents: contents,
     config: { systemInstruction }
@@ -299,13 +342,27 @@ Módulo 5: Parrilla de Contenidos (Calendario)`;
   return response.text;
 };
 
-export const chatWithJuxaVerify = async (history: any[], message: string, context: any) => {
+export const chatWithJuxaVerify = async (
+  history: any[],
+  message: string,
+  context: any,
+  loongOriginationPolicyAppendix?: string
+) => {
+  const appendix =
+    loongOriginationPolicyAppendix && loongOriginationPolicyAppendix.trim()
+      ? `
+
+POLÍTICAS DE ORIGINACIÓN / COBRANZA LOONG MOTOR (RESPETAR AL RESPONDER SOBRE VIABILIDAD O MORA):
+${loongOriginationPolicyAppendix.trim()}
+`
+      : '';
+
   const systemInstruction = `Eres un experto en Crédito, Recursos Humanos e Investigación de Créditos para JUXA Verify.
   Tu misión es ayudar al usuario a analizar los resultados de una investigación específica.
   
   CONTEXTO DE LA INVESTIGACIÓN ACTUAL:
   ${JSON.stringify(context, null, 2)}
-  
+  ${appendix}
   Instrucciones:
   1. Responde de manera profesional, técnica y precisa.
   2. Utiliza el contexto proporcionado para dar respuestas específicas sobre el candidato o solicitante.
@@ -318,7 +375,7 @@ export const chatWithJuxaVerify = async (history: any[], message: string, contex
     parts: [{ text: msg.text }]
   }));
 
-  const response = await ai.models.generateContent({
+  const response = await getAiClient().models.generateContent({
     model: 'gemini-3.1-pro-preview',
     contents: [...contents, { role: 'user', parts: [{ text: message }] }],
     config: { systemInstruction }

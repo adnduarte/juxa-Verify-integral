@@ -1,0 +1,119 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientProfile", "order": "ASCENDING" },
+        { "fieldPath": "organizationId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "investigationScope", "order": "ASCENDING" },
+        { "fieldPath": "clientProfile", "order": "ASCENDING" },
+        { "fieldPath": "mesaPrecalStatus", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "investigationScope", "order": "ASCENDING" },
+        { "fieldPath": "clientProfile", "order": "ASCENDING" },
+        { "fieldPath": "mesaPrecalStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "investigationScope", "order": "ASCENDING" },
+        { "fieldPath": "loongMotorPolicyApplies", "order": "ASCENDING" },
+        { "fieldPath": "mesaPrecalStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "investigationScope", "order": "ASCENDING" },
+        { "fieldPath": "clientProfile", "order": "ASCENDING" },
+        { "fieldPath": "linkStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "investigationScope", "order": "ASCENDING" },
+        { "fieldPath": "clientProfile", "order": "ASCENDING" },
+        { "fieldPath": "linkStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "investigationScope", "order": "ASCENDING" },
+        { "fieldPath": "loongMotorPolicyApplies", "order": "ASCENDING" },
+        { "fieldPath": "linkStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "clientProfile", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "loongMotorPolicyApplies", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "loong_support_tickets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdByUid", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "loong_catalog_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

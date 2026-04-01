@@ -71,16 +71,16 @@ Por favor, selecciona una de las opciones del menú para comenzar:
   };
 
   return (
-    <div className="w-full h-full flex flex-col bg-white">
+    <div className="w-full h-full flex flex-col bg-white dark:bg-slate-900">
       {/* Gemini-style Header */}
-      <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
+      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
             <TrendingUp className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h2 className="font-bold text-slate-900">Duarte-Aupart CGO</h2>
-            <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">Growth & AI Engine</p>
+            <h2 className="font-bold text-slate-900 dark:text-slate-100">Duarte-Aupart CGO</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium tracking-wide uppercase">Growth & AI Engine</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -97,7 +97,7 @@ Por favor, selecciona una de las opciones del menú para comenzar:
             <div key={idx} className={`flex gap-4 sm:gap-6 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
                 msg.role === 'user' 
-                  ? 'bg-slate-100 text-slate-600' 
+                  ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' 
                   : 'bg-gradient-to-br from-slate-900 to-slate-800 text-white'
               }`}>
                 {msg.role === 'user' ? <User className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
@@ -106,13 +106,13 @@ Por favor, selecciona una de las opciones del menú para comenzar:
                 <div className={`inline-block text-left max-w-full sm:max-w-[85%] rounded-2xl px-5 py-4 ${
                   msg.role === 'user' 
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' 
-                    : 'bg-white border border-slate-200 shadow-sm text-slate-800'
+                    : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm text-slate-800 dark:text-slate-200'
                 }`}>
                   <div className={`prose prose-slate max-w-none prose-p:leading-relaxed prose-pre:bg-slate-900 prose-pre:text-slate-100 ${msg.role === 'user' ? 'prose-p:text-white prose-headings:text-white prose-strong:text-white prose-a:text-blue-100' : ''}`}>
                     <Markdown>{msg.text}</Markdown>
                   </div>
                 </div>
-                <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest px-1">
+                <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium uppercase tracking-widest px-1">
                   {msg.role === 'user' ? 'Tú' : 'CGO AI'} • {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
@@ -124,13 +124,13 @@ Por favor, selecciona una de las opciones del menú para comenzar:
                 <Bot className="w-5 h-5" />
               </div>
               <div className="flex-1 space-y-4">
-                <div className="bg-white border border-slate-200 shadow-sm rounded-2xl px-5 py-4 flex items-center gap-3 w-fit">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm rounded-2xl px-5 py-4 flex items-center gap-3 w-fit">
                   <div className="flex gap-1">
                     <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                     <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                     <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce"></div>
                   </div>
-                  <span className="text-sm text-slate-500 font-medium">CGO está pensando...</span>
+                  <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">CGO está pensando...</span>
                 </div>
               </div>
             </div>
@@ -140,7 +140,7 @@ Por favor, selecciona una de las opciones del menú para comenzar:
       </div>
 
       {/* Input Area */}
-      <div className="p-4 sm:p-8 bg-white border-t border-slate-100 shrink-0">
+      <div className="p-4 sm:p-8 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0">
         <div className="max-w-4xl mx-auto">
           <div className="relative group">
             <textarea
@@ -148,7 +148,7 @@ Por favor, selecciona una de las opciones del menú para comenzar:
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Pregúntale al CGO sobre estrategias de crecimiento..."
-              className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-2xl px-5 py-4 pr-14 resize-none min-h-[60px] max-h-[200px] text-slate-700 transition-all shadow-sm"
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-2xl px-5 py-4 pr-14 resize-none min-h-[60px] max-h-[200px] text-slate-700 dark:text-slate-200 transition-all shadow-sm"
               rows={1}
             />
             <button
@@ -159,7 +159,7 @@ Por favor, selecciona una de las opciones del menú para comenzar:
               <Send className="w-5 h-5 ml-0.5" />
             </button>
           </div>
-          <p className="text-[10px] text-center text-slate-400 mt-3 font-medium uppercase tracking-widest">
+          <p className="text-[10px] text-center text-slate-400 dark:text-slate-500 mt-3 font-medium uppercase tracking-widest">
             Impulsado por Duarte-Aupart Growth Engine • 2026
           </p>
         </div>

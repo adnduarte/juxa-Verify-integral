@@ -1,0 +1,60 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Intake Loong: identificación por usuario autenticado
+    match /loong_intake/{userId}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 12 * 1024 * 1024;
+    }
+    /** CVs y anexos de solicitud RRHH (ClientDashboard): solo el usuario que los sube. */
+    match /investigations_cv/{userId}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 16 * 1024 * 1024;
+    }
+    /**
+     * Flujo por enlace: candidato no registrado (puede ser sin sesión o anónimo).
+     * Misma lógica para read+write: el SDK llama getDownloadURL tras uploadBytes; read:false provocaba storage/unauthorized.
+     * Quien conoce el linkId (UUID en la URL) puede subir y obtener URL; el ID no es enumerable.
+     */
+    match /candidate_link_files/{linkId}/{allPaths=**} {
+      allow read: if linkId.size() >= 8 && linkId.size() <= 128;
+      allow create: if linkId.size() >= 8
+        && linkId.size() <= 128
+        && request.resource != null
+        && request.resource.size < 16 * 1024 * 1024;
+      allow update: if linkId.size() >= 8
+        && linkId.size() <= 128
+        && request.resource != null
+        && request.resource.size < 16 * 1024 * 1024;
+      allow delete: if false;
+    }
+
+    /**
+     * Legacy: archivos antiguos bajo investigationId. Mantener escritura mientras existan enlaces viejos.
+     */
+    match /candidatos/{investigationId}/{allPaths=**} {
+      allow write: if request.resource.size < 16 * 1024 * 1024;
+      allow read: if false;
+    }
+
+    /** Anexos que el vendedor Loong sube al expediente (bitácora con el cliente). */
+    match /loong_vendor_docs/{investigationId}/{userId}/{allPaths=**} {
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 16 * 1024 * 1024
+        && (
+          request.resource.contentType.matches('image/.*')
+          || request.resource.contentType == 'application/pdf'
+          || request.resource.contentType == 'application/octet-stream'
+        );
+      allow read: if request.auth != null;
+    }
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

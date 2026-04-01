@@ -16,7 +16,7 @@ export function AIResultRenderer({ resultString }: AIResultRendererProps) {
   } catch (e) {
     // Si falla el parseo, mostramos el texto crudo como fallback
     return (
-      <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+      <div className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">
         {typeof resultString === 'string' ? resultString : JSON.stringify(resultString)}
       </div>
     );
@@ -81,42 +81,42 @@ export function AIResultRenderer({ resultString }: AIResultRendererProps) {
       {/* Detalles del Análisis */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {data.congruenciaDomicilio && (
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center">
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+            <h5 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center">
               <MapPin className="w-4 h-4 mr-1 text-blue-500" />
               Congruencia de Domicilio
             </h5>
-            <p className="text-sm text-slate-700">{data.congruenciaDomicilio.detalles}</p>
+            <p className="text-sm text-slate-700 dark:text-slate-200">{data.congruenciaDomicilio.detalles}</p>
           </div>
         )}
 
         {data.congruenciaFachadaEntorno && (
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center">
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+            <h5 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center">
               <MapPin className="w-4 h-4 mr-1 text-indigo-500" />
               Análisis Fachada vs Entorno
             </h5>
-            <p className="text-sm text-slate-700">{data.congruenciaFachadaEntorno.detalles}</p>
+            <p className="text-sm text-slate-700 dark:text-slate-200">{data.congruenciaFachadaEntorno.detalles}</p>
           </div>
         )}
 
         {data.congruenciaIngresos && (
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center">
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+            <h5 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center">
               <Building2 className="w-4 h-4 mr-1 text-emerald-500" />
               Congruencia de Ingresos / Entorno
             </h5>
-            <p className="text-sm text-slate-700">{data.congruenciaIngresos.detalles}</p>
+            <p className="text-sm text-slate-700 dark:text-slate-200">{data.congruenciaIngresos.detalles}</p>
           </div>
         )}
 
         {data.analisisDocumental && (
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm md:col-span-2">
-            <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center">
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm md:col-span-2">
+            <h5 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center">
               <FileText className="w-4 h-4 mr-1 text-purple-500" />
               Análisis Documental
             </h5>
-            <p className="text-sm text-slate-700">{data.analisisDocumental.detalles}</p>
+            <p className="text-sm text-slate-700 dark:text-slate-200">{data.analisisDocumental.detalles}</p>
           </div>
         )}
       </div>

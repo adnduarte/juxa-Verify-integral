@@ -16,7 +16,7 @@ export const LocationViewer: React.FC<LocationViewerProps> = ({ lat, lng }) => {
   });
 
   if (!isLoaded) {
-    return <div className="w-full h-64 bg-slate-100 animate-pulse rounded-xl flex items-center justify-center text-slate-500">Cargando mapas...</div>;
+    return <div className="w-full h-64 bg-slate-100 dark:bg-slate-800 animate-pulse rounded-xl flex items-center justify-center text-slate-500 dark:text-slate-400">Cargando mapas...</div>;
   }
 
   const center = { lat, lng };
@@ -38,8 +38,8 @@ export const LocationViewer: React.FC<LocationViewerProps> = ({ lat, lng }) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
       <div className="space-y-2">
-        <h4 className="text-sm font-bold text-slate-700">Ubicación en Mapa</h4>
-        <div className="h-64 rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+        <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">Ubicación en Mapa</h4>
+        <div className="h-64 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm">
           <GoogleMap
             mapContainerStyle={{ width: '100%', height: '100%' }}
             center={center}
@@ -54,8 +54,8 @@ export const LocationViewer: React.FC<LocationViewerProps> = ({ lat, lng }) => {
         </div>
       </div>
       <div className="space-y-2">
-        <h4 className="text-sm font-bold text-slate-700">Street View</h4>
-        <div className="h-64 rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+        <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">Street View</h4>
+        <div className="h-64 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm">
           <GoogleMap
             mapContainerStyle={{ width: '100%', height: '100%' }}
             center={center}
