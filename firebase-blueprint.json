@@ -159,6 +159,22 @@
         "updatedAt": {
           "type": "string",
           "format": "date-time"
+        },
+        "isTest": {
+          "type": "boolean",
+          "description": "Flag to identify test investigations."
+        },
+        "loongMontoTotal": {
+          "type": "number",
+          "description": "Total amount to finance for Loong Motor."
+        },
+        "loongEnganche": {
+          "type": "number",
+          "description": "Down payment percentage for Loong Motor."
+        },
+        "linkId": {
+          "type": "string",
+          "description": "The ID of the candidate link associated with this investigation."
         }
       },
       "required": ["id", "clientId", "requestedBy", "status", "title", "createdAt", "updatedAt"]
@@ -230,6 +246,20 @@
         "updatedAt": {
           "type": "string",
           "format": "date-time"
+        },
+        "isTest": {
+          "type": "boolean",
+          "description": "Flag to identify test links."
+        },
+        "isPreQual": {
+          "type": "boolean",
+          "description": "Flag to identify pre-qualification links."
+        },
+        "loongMontoTotal": {
+          "type": "number"
+        },
+        "loongEnganche": {
+          "type": "number"
         }
       },
       "required": ["linkId", "investigationId", "clientId", "status", "createdAt", "updatedAt"]

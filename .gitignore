@@ -6,7 +6,3 @@ coverage/
 *.log
 .env*
 !.env.example
-
-# Clave de cuenta de servicio Firebase (descarga manual; no subir al repo)
-*-firebase-adminsdk-*.json
-firebase-adminsdk*.json
