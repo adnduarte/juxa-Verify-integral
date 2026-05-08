@@ -1,9 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Users, FileText, TrendingUp, Clock, RefreshCw, UserPlus, CreditCard, Link as LinkIcon, Search, Eye, X, Bot, Zap, Briefcase, Plus, Mail, Trash2, Brain, MapPin, Send, FlaskConical, CheckCircle2, AlertCircle, Download, UploadCloud, Image as ImageIcon, FileCheck, Calculator, Copy, Settings } from 'lucide-react';
+import { Users, FileText, TrendingUp, Clock, RefreshCw, UserPlus, CreditCard, Link as LinkIcon, Search, Eye, X, Bot, Zap, Briefcase, Plus, Mail, Trash2, Brain, MapPin, Send, FlaskConical, CheckCircle2, AlertCircle, Download, UploadCloud, Image as ImageIcon, FileCheck, Copy, Settings, Building2, Factory, ShieldAlert, Calculator, ClipboardList } from 'lucide-react';
 import { useJsApiLoader, Autocomplete, GoogleMap, Marker } from '@react-google-maps/api';
 import { db, secondaryAuth } from '../../firebase';
-import { collection, getDocs, deleteDoc, doc, setDoc, query, where, addDoc, getDoc, orderBy, onSnapshot, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, setDoc, query, where, addDoc, getDoc, orderBy, onSnapshot, updateDoc } from '@/lib/localFirestore';
+import { isLocalConstructionMode } from '@/lib/localDataMode';
+import { localDevUidFromEmail } from '@/lib/devPersonasCatalog';
 import { useAuthStatus } from '../../contexts/AuthContext';
+import { useTenant } from '../../contexts/TenantContext';
+import { AdminViewOrganizationProvider, useAdminViewOrganization } from '../../contexts/AdminViewOrganizationContext';
+import type { TenantFeatureFlags } from '../../types/saas';
+import { AdminOrgToolbar, readStoredMenuIgnoreContract } from './AdminOrgToolbar';
 import { toast } from 'react-hot-toast';
 import { CGOEngine } from '../CGOEngine';
 import { IntegralDashboard } from './IntegralDashboard';
@@ -12,6 +18,11 @@ import html2canvas from 'html2canvas';
 import DOMPurify from 'dompurify';
 
 import { DashboardLayout } from './DashboardLayout';
+import { B2BWorkspaceDashboard } from './B2BWorkspaceDashboard';
+import { SupplierComplianceDashboard } from './SupplierComplianceDashboard';
+import { FieldNetworkDashboard } from './FieldNetworkDashboard';
+import { HRDashboard } from './HRDashboard';
+import { AdminIdentityTools } from './AdminIdentityTools';
 import { AIResultRenderer } from '../AIResultRenderer';
 import { JuxaVerifyLoader } from '../JuxaVerifyLoader';
 import { LocationViewer } from '../LocationViewer';
@@ -20,6 +31,8 @@ import { analyzeCandidateData } from '../../lib/gemini';
 
 import { FinancialDashboard } from './FinancialDashboard';
 import { InvestigatorDashboard } from './InvestigatorDashboard';
+import { SaaSOrgAdminPanel } from './SaaSOrgAdminPanel';
+import { FordAuditPeriodPanel } from './FordAuditPeriodPanel';
 
 import { initializeApp } from 'firebase/app';
 import { getAuth, sendPasswordResetEmail, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -27,11 +40,116 @@ import firebaseConfig from '../../../firebase-applet-config.json';
 
 const libraries: ("places")[] = ["places"];
 
-export const AdminDashboard: React.FC = () => {
+const TAB_PRODUCT: Partial<
+  Record<
+    | 'prueba-final'
+    | 'metrics'
+    | 'users'
+    | 'links'
+    | 'lab'
+    | 'plans'
+    | 'simulator'
+    | 'cgo'
+    | 'ia-config'
+    | 'prequal'
+    | 'saas'
+    | 'b2b'
+    | 'suppliers'
+    | 'field'
+    | 'identity'
+    | 'hr-mx'
+    | 'ford-audit',
+    keyof TenantFeatureFlags
+  >
+> = {
+  'prueba-final': 'creditOrigination',
+  prequal: 'creditOrigination',
+  links: 'creditOrigination',
+  simulator: 'creditOrigination',
+  lab: 'creditOrigination',
+  plans: 'creditOrigination',
+  metrics: 'socioeconomicStudies',
+  b2b: 'b2bCollections',
+  suppliers: 'supplierCompliance',
+  field: 'fieldNetwork',
+  identity: 'identityAntiUsurpation',
+  'hr-mx': 'hrSuiteMexico',
+  'ford-audit': 'creditOrigination',
+  cgo: 'creditOrigination',
+};
+
+export const AdminDashboard: React.FC = () => (
+  <AdminViewOrganizationProvider>
+    <AdminDashboardContent />
+  </AdminViewOrganizationProvider>
+);
+
+const AdminDashboardContent: React.FC = () => {
   const { user, role, logUserAction } = useAuthStatus();
+  const { hasProduct } = useTenant();
+  const { viewOrganizationId } = useAdminViewOrganization();
+  const [menuIgnoreContract, setMenuIgnoreContract] = useState(() => readStoredMenuIgnoreContract());
   const isOriginacionUser = user?.email === 'originacion@loong.mx';
-  const [activeTab, setActiveTab] = useState<'prueba-final' | 'metrics' | 'users' | 'links' | 'lab' | 'plans' | 'simulator' | 'cgo' | 'ia-config' | 'loong' | 'prequal'>(isOriginacionUser ? 'prueba-final' : (role === 'EJECUTIVO_VENTAS' ? 'prueba-final' : 'prueba-final'));
+  type AdminTabId =
+    | 'prueba-final'
+    | 'metrics'
+    | 'users'
+    | 'links'
+    | 'lab'
+    | 'plans'
+    | 'simulator'
+    | 'cgo'
+    | 'ia-config'
+    | 'prequal'
+    | 'saas'
+    | 'b2b'
+    | 'suppliers'
+    | 'field'
+    | 'identity'
+    | 'hr-mx'
+    | 'ford-audit';
+  const [activeTab, setActiveTab] = useState<AdminTabId>(
+    isOriginacionUser ? 'prueba-final' : role === 'EJECUTIVO_VENTAS' ? 'prueba-final' : 'prueba-final'
+  );
   const [sellerLocation, setSellerLocation] = useState<{lat: number, lng: number} | null>(null);
+
+  const FORD_PROGRAM_ROOT_ID = 'ford-credit-mx';
+  const [fordAuditInvestigations, setFordAuditInvestigations] = useState<any[]>([]);
+  const [fordAuditAgencies, setFordAuditAgencies] = useState<{ id: string; name: string }[]>([]);
+  const fordAuditAgencyLabels = useMemo(
+    () => Object.fromEntries(fordAuditAgencies.map((a) => [a.id, a.name])),
+    [fordAuditAgencies]
+  );
+
+  useEffect(() => {
+    if (role !== 'ADMIN' || activeTab !== 'ford-audit') return;
+    const q = query(
+      collection(db, 'investigations'),
+      where('vertical', '==', 'FORD_CREDIT_MX'),
+      orderBy('createdAt', 'desc')
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      setFordAuditInvestigations(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, [role, activeTab]);
+
+  useEffect(() => {
+    if (role !== 'ADMIN' || activeTab !== 'ford-audit') return;
+    let cancelled = false;
+    (async () => {
+      const q = query(collection(db, 'organizations'), where('parentOrganizationId', '==', FORD_PROGRAM_ROOT_ID));
+      const snap = await getDocs(q);
+      const list = snap.docs.map((d) => {
+        const data = d.data() as { name?: string };
+        return { id: d.id, name: data.name?.trim() || d.id };
+      });
+      if (!cancelled) setFordAuditAgencies(list);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [role, activeTab]);
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -46,8 +164,9 @@ export const AdminDashboard: React.FC = () => {
       );
     }
 
-    // Bootstrap Superadmin amarquez@juxa.mx
+    // Bootstrap Superadmin amarquez@juxa.mx (solo con Firebase Auth)
     const bootstrapAdmin = async () => {
+      if (isLocalConstructionMode()) return;
       const adminEmail = 'amarquez@juxa.mx';
       const adminPass = 'Twn5y7788';
       try {
@@ -64,8 +183,12 @@ export const AdminDashboard: React.FC = () => {
               uid,
               email: adminEmail,
               role: 'ADMIN',
-              clientType: 'PREMIUM',
+              clientType: 'GRATUITO',
               clientProfile: 'GENERAL',
+              organizationId: 'default',
+              resellerId: null,
+              credits: 999,
+              pagaresCredits: 0,
               createdAt: new Date().toISOString()
             });
             console.log("Superadmin bootstrapped successfully.");
@@ -89,51 +212,104 @@ export const AdminDashboard: React.FC = () => {
     }
   }, [role]);
 
-  const sidebarItems = [
-    { id: 'prueba-final', label: 'Prueba Final (Envío)', icon: Send, roles: ['ADMIN', 'EJECUTIVO_VENTAS'] },
-    { id: 'metrics', label: 'Métricas', icon: TrendingUp, roles: ['ADMIN'] },
-    { id: 'users', label: 'Usuarios y Solicitudes', icon: Users, roles: ['ADMIN'] },
-    { id: 'prequal', label: 'Precalificación (Vendedor)', icon: Zap, roles: ['ADMIN', 'EJECUTIVO_VENTAS'] },
-    { id: 'loong', label: 'Loong Motor (Motos)', icon: Calculator, roles: ['ADMIN', 'EJECUTIVO_VENTAS'] },
-    { id: 'links', label: 'Generador de Enlaces', icon: Send, roles: ['ADMIN'] },
-    { id: 'lab', label: 'Laboratorio Crédito', icon: FlaskConical, roles: ['ADMIN'] },
-    { id: 'plans', label: 'Planes de Cobro', icon: CreditCard, roles: ['ADMIN'] },
-    { id: 'simulator', label: 'Simulador de Enlaces', icon: LinkIcon, roles: ['ADMIN'] },
-    { id: 'cgo', label: 'CGO AI', icon: Bot, roles: ['ADMIN'] },
-    { id: 'ia-config', label: 'Configuración IA', icon: Bot, roles: ['ADMIN'] },
-  ].filter(item => {
-    if (isOriginacionUser) return item.id === 'prueba-final';
-    if (user?.email === 'aduarte@duarteaupartabogados.com') return true; // Debug access
-    return !item.roles || item.roles.includes(role || '');
-  });
+  const sidebarItems = useMemo(() => {
+    const sidebarItemsBase = [
+      { id: 'prueba-final', label: 'Prueba Final (Envío)', icon: Send, roles: ['ADMIN', 'EJECUTIVO_VENTAS'], section: 'Operaciones' },
+      { id: 'prequal', label: 'Precalificación', icon: Zap, roles: ['ADMIN', 'EJECUTIVO_VENTAS'], section: 'Operaciones' },
+      { id: 'links', label: 'Generador de Enlaces', icon: Send, roles: ['ADMIN'], section: 'Operaciones' },
+      { id: 'simulator', label: 'Simulador de Enlaces', icon: LinkIcon, roles: ['ADMIN'], section: 'Operaciones' },
+      { id: 'lab', label: 'Laboratorio Crédito', icon: FlaskConical, roles: ['ADMIN'], section: 'Operaciones' },
+      { id: 'plans', label: 'Planes de Cobro', icon: CreditCard, roles: ['ADMIN'], section: 'Operaciones' },
+      { id: 'metrics', label: 'Métricas', icon: TrendingUp, roles: ['ADMIN'], section: 'Riesgo y cumplimiento' },
+      { id: 'b2b', label: 'B2B / Cobranza', icon: Building2, roles: ['ADMIN'], section: 'Riesgo y cumplimiento' },
+      { id: 'suppliers', label: 'Proveedores', icon: Factory, roles: ['ADMIN'], section: 'Riesgo y cumplimiento' },
+      { id: 'field', label: 'Red y campo', icon: MapPin, roles: ['ADMIN'], section: 'Riesgo y cumplimiento' },
+      { id: 'identity', label: 'Identidad', icon: ShieldAlert, roles: ['ADMIN'], section: 'Riesgo y cumplimiento' },
+      { id: 'ford-audit', label: 'Auditoría Ford IA', icon: ClipboardList, roles: ['ADMIN'], section: 'Riesgo y cumplimiento' },
+      { id: 'hr-mx', label: 'RRHH México', icon: Briefcase, roles: ['ADMIN'], section: 'Riesgo y cumplimiento' },
+      { id: 'cgo', label: 'CGO AI', icon: Bot, roles: ['ADMIN'], section: 'Riesgo y cumplimiento' },
+      { id: 'users', label: 'Usuarios', icon: Users, roles: ['ADMIN'], section: 'Plataforma' },
+      { id: 'ia-config', label: 'Configuración IA', icon: Bot, roles: ['ADMIN'], section: 'Plataforma' },
+      { id: 'saas', label: 'Onboarding / tenants', icon: Settings, roles: ['ADMIN'], section: 'Plataforma' },
+    ];
+    let items = sidebarItemsBase.filter((item) => {
+      if (isOriginacionUser) return item.id === 'prueba-final';
+      if (user?.email === 'aduarte@duarteaupartabogados.com') return true;
+      return !item.roles || item.roles.includes(role || '');
+    });
+    const applyProductFilter =
+      !menuIgnoreContract && role === 'ADMIN' && !isOriginacionUser && user?.email !== 'aduarte@duarteaupartabogados.com';
+    if (applyProductFilter) {
+      items = items.filter((item) => {
+        const pk = TAB_PRODUCT[item.id as keyof typeof TAB_PRODUCT];
+        if (pk && !hasProduct(pk)) return false;
+        return true;
+      });
+    }
+    return items;
+  }, [role, user?.email, isOriginacionUser, hasProduct, menuIgnoreContract]);
+
+  useEffect(() => {
+    const ids = new Set(sidebarItems.map((i) => i.id));
+    setActiveTab((prev) => {
+      if (ids.has(prev)) return prev;
+      const fallback = (sidebarItems[0]?.id as AdminTabId) || 'saas';
+      return fallback;
+    });
+  }, [sidebarItems]);
 
   return (
-    <div className="p-4 sm:p-8 h-full">
+    <div className="h-full min-h-0 flex flex-col px-3 sm:px-5 lg:px-6 pt-2 sm:pt-3 pb-2 sm:pb-4">
+      {role === 'ADMIN' && !isOriginacionUser && (
+        <AdminOrgToolbar menuIgnoreContract={menuIgnoreContract} onMenuIgnoreContractChange={setMenuIgnoreContract} />
+      )}
       <DashboardLayout
         title={isOriginacionUser ? 'Panel de Originación' : (role === 'EJECUTIVO_VENTAS' ? 'Panel de Ventas' : 'Dashboard de Administración')}
         subtitle={isOriginacionUser ? 'Generación de estudios de arraigo' : (role === 'EJECUTIVO_VENTAS' ? 'Gestión de prospectos y precalificación' : 'Gestión global de la plataforma')}
         sidebarItems={sidebarItems}
         activeTab={activeTab}
-        onTabChange={(id) => setActiveTab(id as any)}
+        onTabChange={(id) => setActiveTab(id as AdminTabId)}
+        showFinancialComplianceAside={!isOriginacionUser && role !== 'EJECUTIVO_VENTAS'}
       >
         {activeTab === 'prueba-final' && <PruebaFinalTab sellerLocation={sellerLocation} />}
         {activeTab === 'metrics' && <MetricsTab />}
         {activeTab === 'users' && <UsersTab />}
         {activeTab === 'prequal' && <PreQualTab sellerLocation={sellerLocation} />}
-        {activeTab === 'loong' && <LoongMotorTab />}
         {activeTab === 'links' && <LinksTab sellerLocation={sellerLocation} />}
         {activeTab === 'lab' && <CreditLabTab sellerLocation={sellerLocation} />}
         {activeTab === 'plans' && <PlansTab />}
         {activeTab === 'simulator' && <SimulatorTab sellerLocation={sellerLocation} />}
         {activeTab === 'cgo' && <CGOEngine />}
         {activeTab === 'ia-config' && <IAConfigTab />}
+        {activeTab === 'saas' && <SaaSOrgAdminPanel />}
+        {activeTab === 'b2b' && <B2BWorkspaceDashboard variant="embedded" organizationIdOverride={viewOrganizationId} />}
+        {activeTab === 'suppliers' && (
+          <SupplierComplianceDashboard variant="embedded" organizationIdOverride={viewOrganizationId} />
+        )}
+        {activeTab === 'field' && (
+          <FieldNetworkDashboard role="OPERADOR_RED_VISITAS" variant="embedded" organizationIdOverride={viewOrganizationId} />
+        )}
+        {activeTab === 'identity' && <AdminIdentityTools />}
+        {activeTab === 'ford-audit' && (
+          <FordAuditPeriodPanel
+            investigations={fordAuditInvestigations}
+            agencyLabelByOrgId={fordAuditAgencyLabels}
+            variant="admin"
+          />
+        )}
+        {activeTab === 'hr-mx' && <HRDashboard variant="embedded" />}
       </DashboardLayout>
     </div>
   );
 };
 
 const PruebaFinalTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: number} | null }) => {
-  const { user, logUserAction } = useAuthStatus();
+  const { user, organizationId, logUserAction } = useAuthStatus();
+  const { branding, organization } = useTenant();
+  const primary = branding.primaryColor?.trim() || '#2563eb';
+  const adminVertical = organization?.partnerVertical && organization.partnerVertical !== 'NONE'
+    ? organization.partnerVertical
+    : null;
   const [generatedLink, setGeneratedLink] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [candidateName, setCandidateName] = useState('');
@@ -181,7 +357,7 @@ const PruebaFinalTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng:
 
       const aiResult = await analyzeCandidateData(
         {
-          perfil: inv.clientProfile || 'LOONG_MOTOR',
+          perfil: inv.clientProfile || 'CREDIT',
           puesto: inv.jobProfile?.vacancy || 'No especificado',
           montoCreditoCapital: inv.montoCreditoCapital,
           montoCreditoIntereses: inv.montoCreditoIntereses,
@@ -283,11 +459,14 @@ const PruebaFinalTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng:
         id: invId,
         clientId: user?.uid || 'admin_direct',
         requestedBy: user?.uid || 'admin_direct',
+        organizationId: organizationId || 'default',
+        ...(adminVertical ? { vertical: adminVertical } : {}),
         status: 'PENDING',
         title: `PRUEBA FINAL: ${candidateName}`,
-        clientProfile: 'LOONG_MOTOR',
-        investigationType: 'LOONG_MOTOR',
+        clientProfile: 'CREDIT',
+        investigationType: 'CREDIT',
         investigationScope: 'INTEGRAL',
+        creditPipelineStage: 'PRE_QUALIFICATION',
         loongMontoTotal: null,
         loongEnganche: null,
         createdAt: new Date().toISOString(),
@@ -305,8 +484,10 @@ const PruebaFinalTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng:
         linkId,
         investigationId: invId,
         clientId: user?.uid || 'admin_direct',
-        clientProfile: 'LOONG_MOTOR',
-        investigationType: 'LOONG_MOTOR',
+        organizationId: organizationId || 'default',
+        ...(adminVertical ? { vertical: adminVertical } : {}),
+        clientProfile: 'CREDIT',
+        investigationType: 'CREDIT',
         investigationScope: 'INTEGRAL',
         title: `PRUEBA FINAL: ${candidateName}`,
         status: 'PENDING',
@@ -336,32 +517,37 @@ const PruebaFinalTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng:
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-200/50">
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200">
-            <Send className="w-6 h-6" />
+    <div className="max-w-2xl mx-auto space-y-5 md:space-y-6">
+      <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/90 shadow-md shadow-slate-200/35 ring-1 ring-slate-100">
+        <div className="flex items-start gap-4 mb-6">
+          <div
+            className="w-11 h-11 sm:w-12 sm:h-12 text-white rounded-xl flex items-center justify-center shadow-md shrink-0"
+            style={{ backgroundColor: primary }}
+          >
+            <Send className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <div>
-            <h3 className="text-xl font-bold text-slate-900">Envío de Enlace - Prueba Final</h3>
-            <p className="text-sm text-slate-500">Genera un enlace para que el solicitante complete su estudio de arraigo.</p>
+          <div className="min-w-0">
+            <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Prueba final — envío de enlace</h3>
+            <p className="text-sm text-slate-600 mt-1 leading-relaxed">
+              Genera un enlace para que el solicitante complete su estudio de arraigo.
+            </p>
           </div>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-5">
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Nombre del Solicitante</label>
+            <label className="block text-sm font-semibold text-slate-800 mb-2">Nombre del solicitante</label>
             <input 
               type="text" 
               value={candidateName}
               onChange={e => setCandidateName(e.target.value)}
               placeholder="Ej. Juan Pérez"
-              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50/40 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200/90 focus:border-slate-300 transition-shadow"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Ubicación a Investigar (Target)</label>
+            <label className="block text-sm font-semibold text-slate-800 mb-2">Ubicación a investigar (objetivo)</label>
             {isLoaded && (
               <Autocomplete
                 onLoad={ref => autocompleteRef.current = ref}
@@ -372,7 +558,7 @@ const PruebaFinalTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng:
                   <input 
                     type="text" 
                     placeholder="Busca la dirección del cliente..."
-                    className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl bg-slate-50/40 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200/90 focus:border-slate-300 transition-shadow"
                   />
                 </div>
               </Autocomplete>
@@ -410,9 +596,10 @@ const PruebaFinalTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng:
           <button 
             onClick={handleGenerateTestLink}
             disabled={isGenerating}
-            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 disabled:opacity-50"
+            className="w-full py-3.5 text-white rounded-xl font-semibold transition-opacity hover:opacity-95 active:opacity-90 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ backgroundColor: primary, boxShadow: `0 4px 14px -4px ${primary}88` }}
           >
-            {isGenerating ? 'Generando...' : 'Generar Enlace de Prueba'}
+            {isGenerating ? 'Generando…' : 'Generar enlace de prueba'}
           </button>
 
           {generatedLink && (
@@ -453,10 +640,10 @@ const PruebaFinalTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng:
         </div>
       </div>
 
-      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden">
-        <div className="px-8 py-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-md shadow-slate-200/35 ring-1 ring-slate-100 overflow-hidden">
+        <div className="px-5 sm:px-8 py-5 border-b border-slate-100 bg-slate-50/80 flex justify-between items-center gap-3">
           <div>
-            <h3 className="font-bold text-slate-900">Historial de Pruebas Finales</h3>
+            <h3 className="font-semibold text-slate-900">Historial de pruebas finales</h3>
             <p className="text-xs text-slate-500">Resultados de los dictámenes de arraigo generados.</p>
           </div>
           <div className="flex items-center gap-2">
@@ -816,7 +1003,11 @@ const IAConfigTab = () => {
 };
 
 const LinksTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: number} | null }) => {
-  const { user, logUserAction } = useAuthStatus();
+  const { user, organizationId, logUserAction } = useAuthStatus();
+  const { organization } = useTenant();
+  const adminVertical = organization?.partnerVertical && organization.partnerVertical !== 'NONE'
+    ? organization.partnerVertical
+    : null;
   const [clients, setClients] = useState<any[]>([]);
   const [selectedClientId, setSelectedClientId] = useState('');
   const [linkType, setLinkType] = useState('HR');
@@ -880,20 +1071,37 @@ const LinksTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: numbe
     if (!newClientEmail || !newClientPass) return;
     setIsCreatingClient(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newClientEmail.toLowerCase(), newClientPass);
-      const newUserId = userCredential.user.uid;
+      const emailLower = newClientEmail.toLowerCase();
+      let newUserId: string;
+      if (isLocalConstructionMode()) {
+        newUserId = localDevUidFromEmail(emailLower);
+        const existing = await getDoc(doc(db, 'users', newUserId));
+        if (existing.exists()) {
+          alert('Ya existe un usuario local con ese correo.');
+          return;
+        }
+      } else {
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, emailLower, newClientPass);
+        newUserId = userCredential.user.uid;
+      }
 
       await setDoc(doc(db, 'users', newUserId), {
         uid: newUserId,
-        email: newClientEmail.toLowerCase(),
+        email: emailLower,
         role: 'CLIENTE',
         clientType: 'GRATUITO',
         clientProfile: 'CREDIT',
         credits: 10,
+        organizationId: 'default',
+        resellerId: null,
         createdAt: new Date().toISOString()
       });
 
-      alert('Cliente creado exitosamente.');
+      alert(
+        isLocalConstructionMode()
+          ? 'Cliente guardado en datos locales. Inicia sesión con la contraseña de desarrollo (la misma que en accesos rápidos), no con la contraseña del formulario.'
+          : 'Cliente creado exitosamente.'
+      );
       setIsNewClientModalOpen(false);
       setNewClientEmail('');
       setNewClientPass('');
@@ -925,13 +1133,16 @@ const LinksTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: numbe
         id: invId,
         clientId: selectedClientId,
         requestedBy: 'admin',
+        organizationId: organizationId || 'default',
+        ...(adminVertical ? { vertical: adminVertical } : {}),
         status: 'PENDING',
         title: linkTitle,
         clientProfile: linkType,
         investigationType: linkType,
         investigationScope: linkType === 'CREDIT' ? linkScope : 'INTEGRAL',
-        loongMontoTotal: linkType === 'LOONG_MOTOR' ? loongMontoTotal : null,
-        loongEnganche: linkType === 'LOONG_MOTOR' ? loongEnganche : null,
+        creditPipelineStage: linkType === 'CREDIT' ? 'PRE_QUALIFICATION' : undefined,
+        loongMontoTotal: linkType === 'CREDIT' && loongMontoTotal ? loongMontoTotal : null,
+        loongEnganche: linkType === 'CREDIT' && loongEnganche ? loongEnganche : null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         createdByAdmin: true,
@@ -947,11 +1158,13 @@ const LinksTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: numbe
         linkId,
         investigationId: invId,
         clientId: selectedClientId,
+        organizationId: organizationId || 'default',
+        ...(adminVertical ? { vertical: adminVertical } : {}),
         clientProfile: linkType,
         investigationType: linkType,
         investigationScope: linkType === 'CREDIT' ? linkScope : 'INTEGRAL',
-        loongMontoTotal: linkType === 'LOONG_MOTOR' ? loongMontoTotal : null,
-        loongEnganche: linkType === 'LOONG_MOTOR' ? loongEnganche : null,
+        loongMontoTotal: linkType === 'CREDIT' && loongMontoTotal ? loongMontoTotal : null,
+        loongEnganche: linkType === 'CREDIT' && loongEnganche ? loongEnganche : null,
         title: linkTitle,
         status: 'PENDING',
         createdAt: new Date().toISOString(),
@@ -1024,7 +1237,6 @@ const LinksTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: numbe
               <select value={linkType} onChange={e => setLinkType(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white">
                 <option value="HR">Recursos Humanos</option>
                 <option value="CREDIT">Crédito</option>
-                <option value="LOONG_MOTOR">Loong Motor (Motocicletas)</option>
                 <option value="PROVIDER">Proveedores</option>
               </select>
             </div>
@@ -1040,10 +1252,10 @@ const LinksTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: numbe
             )}
           </div>
 
-          {linkType === 'LOONG_MOTOR' && (
+          {linkType === 'CREDIT' && (
             <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 space-y-4 animate-in fade-in slide-in-from-top-2">
               <div className="flex items-center text-blue-800 font-bold text-sm mb-2">
-                <Zap className="w-4 h-4 mr-2" /> Configuración Loong Motor
+                <Zap className="w-4 h-4 mr-2" /> Financiamiento (opcional)
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -1971,6 +2183,9 @@ const UsersTab = () => {
   const [newClientProfile, setNewClientProfile] = useState('GENERAL');
   const [newCredits, setNewCredits] = useState(0);
   const [newPagaresCredits, setNewPagaresCredits] = useState(0);
+  const [newOrganizationId, setNewOrganizationId] = useState('default');
+  const [newResellerId, setNewResellerId] = useState('');
+  const [newClientAccountRole, setNewClientAccountRole] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -1982,6 +2197,9 @@ const UsersTab = () => {
   const [editCredits, setEditCredits] = useState(0);
   const [editPagaresCredits, setEditPagaresCredits] = useState(0);
   const [editPhone, setEditPhone] = useState('');
+  const [editOrganizationId, setEditOrganizationId] = useState('default');
+  const [editResellerId, setEditResellerId] = useState('');
+  const [editClientAccountRole, setEditClientAccountRole] = useState('');
   const [isEditing, setIsEditing] = useState(false);
 
   // View User Investigations State
@@ -2049,28 +2267,46 @@ const UsersTab = () => {
     }
     setIsAdding(true);
     try {
-      // Create user in secondary auth instance to avoid signing out the admin
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail.toLowerCase(), newPassword);
-      const newUserId = userCredential.user.uid;
+      const emailLower = newEmail.toLowerCase();
+      let newUserId: string;
+      if (isLocalConstructionMode()) {
+        newUserId = localDevUidFromEmail(emailLower);
+        const existing = await getDoc(doc(db, 'users', newUserId));
+        if (existing.exists()) {
+          alert('Ya existe un usuario local con ese correo.');
+          return;
+        }
+      } else {
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, emailLower, newPassword);
+        newUserId = userCredential.user.uid;
+      }
 
-      // Save to users collection
       await setDoc(doc(db, 'users', newUserId), {
         uid: newUserId,
-        email: newEmail.toLowerCase(),
+        email: emailLower,
         phone: newPhone,
         role: newRole,
         clientType: newClientType,
         clientProfile: newClientProfile,
+        organizationId: newOrganizationId.trim() || 'default',
+        resellerId: newResellerId.trim() || null,
         credits: Number(newCredits),
         pagaresCredits: Number(newPagaresCredits),
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        ...(newClientAccountRole.trim() !== ''
+          ? { clientAccountRole: newClientAccountRole.trim().toUpperCase() }
+          : {}),
       });
       
       if (logUserAction && user) {
         logUserAction(user.uid, 'ADMIN_CREATE_USER', { createdUserId: newUserId, email: newEmail });
       }
 
-      alert('Usuario creado exitosamente en el sistema.');
+      alert(
+        isLocalConstructionMode()
+          ? 'Usuario guardado en datos locales. Inicia sesión con la contraseña de desarrollo (accesos rápidos), no con la del formulario.'
+          : 'Usuario creado exitosamente en el sistema.'
+      );
       setNewEmail('');
       setNewPassword('');
       setNewPhone('');
@@ -2093,7 +2329,10 @@ const UsersTab = () => {
                 credits: Number(newCredits),
                 pagaresCredits: Number(newPagaresCredits),
                 createdAt: new Date().toISOString(),
-                isManualSync: true
+                isManualSync: true,
+                ...(newClientAccountRole.trim() !== ''
+                  ? { clientAccountRole: newClientAccountRole.trim().toUpperCase() }
+                  : {}),
               });
               alert('Perfil creado. El usuario se sincronizará completamente en su próximo inicio de sesión.');
               setNewEmail('');
@@ -2121,6 +2360,10 @@ const UsersTab = () => {
   };
 
   const handlePasswordReset = async (email: string) => {
+    if (isLocalConstructionMode()) {
+      toast('En modo local no se envían correos de Firebase. Usa la contraseña de desarrollo o crea otro usuario en la tabla.');
+      return;
+    }
     if (!window.confirm(`¿Enviar correo de restablecimiento de contraseña a ${email}?`)) return;
     try {
       await sendPasswordResetEmail(secondaryAuth, email);
@@ -2140,10 +2383,14 @@ const UsersTab = () => {
         role: editRole,
         clientType: editClientType,
         clientProfile: editClientProfile,
+        organizationId: editOrganizationId.trim() || 'default',
+        resellerId: editResellerId.trim() || null,
         credits: Number(editCredits),
         pagaresCredits: Number(editPagaresCredits),
         phone: editPhone,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        clientAccountRole:
+          editClientAccountRole.trim() === '' ? null : editClientAccountRole.trim().toUpperCase(),
       }, { merge: true });
       
       if (logUserAction && user) {
@@ -2218,6 +2465,11 @@ const UsersTab = () => {
     setEditCredits(user.credits || 0);
     setEditPagaresCredits(user.pagaresCredits || 0);
     setEditPhone(user.phone || '');
+    setEditOrganizationId(user.organizationId || 'default');
+    setEditResellerId(user.resellerId || '');
+    setEditClientAccountRole(
+      user.clientAccountRole ? String(user.clientAccountRole).trim().toUpperCase() : ''
+    );
   };
 
   const viewUserInvestigations = async (user: any) => {
@@ -2283,6 +2535,9 @@ const UsersTab = () => {
               <option value="CLIENTE">Cliente</option>
               <option value="CLIENTE_FINANCIERO">Cliente Financiero / Banco</option>
               <option value="INVESTIGADOR">Investigador</option>
+              <option value="OPERADOR_CAMPO">Operador de campo</option>
+              <option value="OPERADOR_RED_VISITAS">Operador red de visitas</option>
+              <option value="SOLICITANTE">Solicitante</option>
               <option value="ADMIN">Admin</option>
             </select>
           </div>
@@ -2292,6 +2547,7 @@ const UsersTab = () => {
               <option value="GRATUITO">Gratuito</option>
               <option value="BOLSA">Bolsa</option>
               <option value="SUSCRIPCION">Suscripción</option>
+              <option value="EMPRESARIAL">Empresarial (sin límite de folios)</option>
             </select>
           </div>
           <div className="lg:col-span-1">
@@ -2301,9 +2557,48 @@ const UsersTab = () => {
               <option value="INVESTIGACION">Solo Investigación (SaaS)</option>
               <option value="HR">Recursos Humanos</option>
               <option value="CREDIT">Crédito (General)</option>
-              <option value="LOONG_MOTOR">Loong Motor (Motocicletas)</option>
               <option value="SME">Pyme</option>
+              <option value="INTEGRAL">Integral (firma / identidad)</option>
+              <option value="B2B">B2B originación y cobranza</option>
+              <option value="SUPPLIER_VALIDATION">Validación de proveedores</option>
             </select>
+          </div>
+          <div className="lg:col-span-2">
+            <label className="block text-xs font-medium text-slate-700 mb-1">Asiento en cuenta (panel cliente)</label>
+            <select
+              value={newClientAccountRole}
+              onChange={(e) => setNewClientAccountRole(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 bg-white"
+            >
+              <option value="">Sin definir — puede ver configuración (legacy)</option>
+              <option value="OPERATIVO">Operativo — sin acceso a configuración de cuenta</option>
+              <option value="GERENCIA">Gerencia</option>
+              <option value="DIRECCION">Dirección</option>
+              <option value="SUPERADMIN">Superadmin de cuenta (organización)</option>
+            </select>
+            <p className="text-[10px] text-slate-500 mt-1">
+              Solo gerencia, dirección o superadmin de la organización deben ver la pestaña Configuración en el panel de cliente; asigna Operativo para el resto.
+            </p>
+          </div>
+          <div className="lg:col-span-2">
+            <label className="block text-xs font-medium text-slate-700 mb-1">organizationId (tenant)</label>
+            <input
+              type="text"
+              value={newOrganizationId}
+              onChange={(e) => setNewOrganizationId(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 font-mono"
+              placeholder="default"
+            />
+          </div>
+          <div className="lg:col-span-2">
+            <label className="block text-xs font-medium text-slate-700 mb-1">resellerId (marca blanca, opcional)</label>
+            <input
+              type="text"
+              value={newResellerId}
+              onChange={(e) => setNewResellerId(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 font-mono"
+              placeholder="org padre revendedora"
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">Créditos Inv.</label>
@@ -2487,6 +2782,9 @@ const UsersTab = () => {
                   <option value="CLIENTE">Cliente</option>
                   <option value="CLIENTE_FINANCIERO">Cliente Financiero / Banco</option>
                   <option value="INVESTIGADOR">Investigador</option>
+                  <option value="OPERADOR_CAMPO">Operador de campo</option>
+                  <option value="OPERADOR_RED_VISITAS">Operador red de visitas</option>
+                  <option value="SOLICITANTE">Solicitante</option>
                   <option value="ADMIN">Admin</option>
                 </select>
               </div>
@@ -2497,6 +2795,7 @@ const UsersTab = () => {
                     <option value="GRATUITO">Gratuito</option>
                     <option value="BOLSA">Bolsa</option>
                     <option value="SUSCRIPCION">Suscripción</option>
+                    <option value="EMPRESARIAL">Empresarial (sin límite de folios)</option>
                   </select>
                 </div>
                 <div>
@@ -2506,10 +2805,44 @@ const UsersTab = () => {
                     <option value="INVESTIGACION">Solo Investigación (SaaS)</option>
                     <option value="HR">Recursos Humanos</option>
                     <option value="CREDIT">Crédito (General)</option>
-                    <option value="LOONG_MOTOR">Loong Motor (Motocicletas)</option>
                     <option value="SME">Pyme</option>
+                    <option value="INTEGRAL">Integral</option>
+                    <option value="B2B">B2B</option>
+                    <option value="SUPPLIER_VALIDATION">Proveedores</option>
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Asiento en cuenta (panel cliente)</label>
+                <select
+                  value={editClientAccountRole}
+                  onChange={(e) => setEditClientAccountRole(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 bg-white"
+                >
+                  <option value="">Sin definir — puede ver configuración (legacy)</option>
+                  <option value="OPERATIVO">Operativo — sin acceso a configuración de cuenta</option>
+                  <option value="GERENCIA">Gerencia</option>
+                  <option value="DIRECCION">Dirección</option>
+                  <option value="SUPERADMIN">Superadmin de cuenta (organización)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">organizationId</label>
+                <input
+                  type="text"
+                  value={editOrganizationId}
+                  onChange={(e) => setEditOrganizationId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">resellerId (opcional)</label>
+                <input
+                  type="text"
+                  value={editResellerId}
+                  onChange={(e) => setEditResellerId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 font-mono"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -2656,9 +2989,13 @@ const UsersTab = () => {
 };
 
 const PreQualTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: number} | null }) => {
-  const { user, role, logUserAction } = useAuthStatus();
+  const { user, role, organizationId, logUserAction } = useAuthStatus();
+  const { organization } = useTenant();
+  const adminVertical = organization?.partnerVertical && organization.partnerVertical !== 'NONE'
+    ? organization.partnerVertical
+    : null;
   const [preQualTitle, setPreQualTitle] = useState('');
-  const [preQualType, setPreQualType] = useState('LOONG_MOTOR');
+  const [preQualType, setPreQualType] = useState('CREDIT');
   const [monto, setMonto] = useState('');
   const [enganche, setEnganche] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -2712,13 +3049,16 @@ const PreQualTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: num
         id: invId,
         clientId: 'admin_direct', // Public/Direct client
         requestedBy: user?.email || 'vendedor',
+        organizationId: organizationId || 'default',
+        ...(adminVertical ? { vertical: adminVertical } : {}),
         status: 'PENDING',
         title: preQualTitle,
         clientProfile: preQualType,
         investigationType: preQualType,
         investigationScope: 'SIMPLE',
-        loongMontoTotal: preQualType === 'LOONG_MOTOR' ? monto : null,
-        loongEnganche: preQualType === 'LOONG_MOTOR' ? enganche : null,
+        creditPipelineStage: preQualType === 'CREDIT' ? 'PRE_QUALIFICATION' : undefined,
+        loongMontoTotal: preQualType === 'CREDIT' && monto ? monto : null,
+        loongEnganche: preQualType === 'CREDIT' && enganche ? enganche : null,
         isTestMode: isTestMode,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -2733,11 +3073,13 @@ const PreQualTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: num
         linkId,
         investigationId: invId,
         clientId: 'admin_direct',
+        organizationId: organizationId || 'default',
+        ...(adminVertical ? { vertical: adminVertical } : {}),
         clientProfile: preQualType,
         investigationType: preQualType,
         investigationScope: 'SIMPLE',
-        loongMontoTotal: preQualType === 'LOONG_MOTOR' ? monto : null,
-        loongEnganche: preQualType === 'LOONG_MOTOR' ? enganche : null,
+        loongMontoTotal: preQualType === 'CREDIT' && monto ? monto : null,
+        loongEnganche: preQualType === 'CREDIT' && enganche ? enganche : null,
         title: preQualTitle,
         status: 'PENDING',
         isTestMode: isTestMode,
@@ -2815,14 +3157,13 @@ const PreQualTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: num
                 onChange={e => setPreQualType(e.target.value)} 
                 className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:border-blue-500 bg-white transition-all"
               >
-                <option value="LOONG_MOTOR">Loong Motor (Motos)</option>
-                <option value="CREDIT">Crédito General</option>
+                <option value="CREDIT">Crédito</option>
                 <option value="HR">Recursos Humanos</option>
               </select>
             </div>
-            {preQualType === 'LOONG_MOTOR' && (
+            {preQualType === 'CREDIT' && (
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Monto Total ($)</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Monto total ($) — opcional</label>
                 <input 
                   type="number" 
                   value={monto} 
@@ -2834,9 +3175,9 @@ const PreQualTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: num
             )}
           </div>
 
-          {preQualType === 'LOONG_MOTOR' && (
+          {preQualType === 'CREDIT' && (
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Enganche (%)</label>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Enganche (%) — opcional</label>
               <input 
                 type="number" 
                 value={enganche} 
@@ -2960,7 +3301,7 @@ const PreQualTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: num
                       <span className="font-bold text-blue-600">{inv.investigationType}</span>
                       <span>{new Date(inv.createdAt).toLocaleDateString()}</span>
                       {inv.loongMontoTotal && (
-                        <span className="text-red-600 font-bold">${Number(inv.loongMontoTotal).toLocaleString()}</span>
+                        <span className="text-blue-700 font-bold">${Number(inv.loongMontoTotal).toLocaleString()}</span>
                       )}
                       {inv.isTestMode && (
                         <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-black uppercase tracking-tighter">TEST</span>
@@ -3239,7 +3580,11 @@ const PlansTab = () => {
 };
 
 const SimulatorTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: number} | null }) => {
-  const { user, logUserAction } = useAuthStatus();
+  const { user, organizationId, logUserAction } = useAuthStatus();
+  const { organization } = useTenant();
+  const adminVertical = organization?.partnerVertical && organization.partnerVertical !== 'NONE'
+    ? organization.partnerVertical
+    : null;
   const [simType, setSimType] = useState('HR');
   const [simName, setSimName] = useState('Candidato de Prueba');
   const [generatedLink, setGeneratedLink] = useState('');
@@ -3297,6 +3642,8 @@ const SimulatorTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: n
         id: invId,
         clientId: 'admin_simulator',
         requestedBy: 'admin',
+        organizationId: organizationId || 'default',
+        ...(adminVertical ? { vertical: adminVertical } : {}),
         status: 'PENDING',
         title: simName,
         clientProfile: simType,
@@ -3311,6 +3658,8 @@ const SimulatorTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: n
         linkId,
         investigationId: invId,
         clientId: 'admin_simulator',
+        organizationId: organizationId || 'default',
+        ...(adminVertical ? { vertical: adminVertical } : {}),
         clientProfile: simType,
         investigationType: simType,
         title: simName,
@@ -3571,465 +3920,6 @@ const SimulatorTab = ({ sellerLocation }: { sellerLocation: {lat: number, lng: n
               >
                 Cerrar
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const LoongMotorTab = () => {
-  const [investigations, setInvestigations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedInv, setSelectedInv] = useState<any>(null);
-  const [isRestarting, setIsRestarting] = useState(false);
-  const { user, role, logUserAction } = useAuthStatus();
-
-  const handleRestartAI = async (inv: any) => {
-    if (!inv.candidateData) {
-      toast.error('No hay datos del candidato para analizar.');
-      return;
-    }
-    
-    setIsRestarting(true);
-    try {
-      const candidateData = JSON.parse(inv.candidateData);
-      const urls = inv.uploadedFileUrls || {};
-      
-      const imageParts = [
-        urls.fotoFachadaUrl || candidateData.fotoFachadaUrl,
-        urls.videoFachadaUrl || candidateData.videoFachadaUrl,
-        urls.fotoSalaUrl || candidateData.fotoSalaUrl,
-        urls.fotoComedorUrl || candidateData.fotoComedorUrl,
-        urls.fotoCocinaUrl || candidateData.fotoCocinaUrl,
-        urls.fotoHabitacionUrl || candidateData.fotoHabitacionUrl,
-        urls.idFrontUrl || candidateData.idFrontUrl,
-        urls.idBackUrl || candidateData.idBackUrl,
-        urls.proofOfAddressUrl || candidateData.proofOfAddressUrl,
-        urls.selfieUrl || candidateData.selfieUrl
-      ].filter(Boolean);
-
-      // Fetch client rules if possible
-      let businessRules = '';
-      let scoringConfig = null;
-      if (inv.clientId) {
-        const clientDoc = await getDoc(doc(db, 'clients', inv.clientId));
-        if (clientDoc.exists()) {
-          const clientData = clientDoc.data();
-          businessRules = clientData.politicasGenerales || '';
-          scoringConfig = clientData.scoringConfig || null;
-        }
-      }
-
-      const aiResult = await analyzeCandidateData(
-        {
-          perfil: inv.clientProfile || 'LOONG_MOTOR',
-          puesto: inv.jobProfile?.vacancy || 'No especificado',
-          montoCreditoCapital: inv.montoCreditoCapital,
-          montoCreditoIntereses: inv.montoCreditoIntereses,
-          plazoFinanciamiento: inv.plazoFinanciamiento,
-          tipoCredito: inv.tipoCredito,
-          loongMontoTotal: inv.loongMontoTotal,
-          loongEnganche: inv.loongEnganche,
-          ...candidateData
-        },
-        imageParts,
-        businessRules,
-        'none',
-        scoringConfig
-      );
-
-      const aiParsed = JSON.parse(aiResult);
-      const dictamen = {
-        ...aiParsed,
-        congruenciaDomicilio: {
-          ...(aiParsed.congruenciaDomicilio || {}),
-          distanciaMetros: inv.distanceMeters || candidateData.distanceMeters || 0,
-          verificado: (inv.distanceMeters || candidateData.distanceMeters || 0) < 150
-        }
-      };
-
-      const updateData = {
-        socioeconomicDictamen: JSON.stringify(dictamen),
-        result: aiResult.includes('"estado":"VIABLE"') ? 'VIABLE' : (aiResult.includes('"estado":"REVIEW"') ? 'REVIEW' : 'NO_VIABLE'),
-        status: 'COMPLETED',
-        score: dictamen?.score || 0,
-        scoreBreakdown: dictamen?.scoreBreakdown ? JSON.stringify(dictamen.scoreBreakdown) : null,
-        updatedAt: new Date().toISOString()
-      };
-
-      await updateDoc(doc(db, 'investigations', inv.id), updateData);
-      
-      // Update selectedInv to reflect changes in modal
-      setSelectedInv({ ...inv, ...updateData });
-      toast.success('Análisis reiniciado con éxito');
-    } catch (error: any) {
-      console.error("Error restarting AI:", error);
-      toast.error(`Error al reiniciar análisis: ${error.message}`);
-    } finally {
-      setIsRestarting(false);
-    }
-  };
-
-  const handleReopen = async (inv: any) => {
-    if (!window.confirm('¿Estás seguro de que deseas re-abrir este enlace?')) return;
-    try {
-      await updateDoc(doc(db, 'investigations', inv.id), {
-        status: 'OPENED',
-        linkStatus: 'OPENED',
-        updatedAt: new Date().toISOString()
-      });
-      if (inv.candidateLink) {
-        await updateDoc(doc(db, 'candidate_links', inv.candidateLink), {
-          status: 'OPENED',
-          updatedAt: new Date().toISOString()
-        });
-      }
-      alert('Enlace re-abierto con éxito');
-    } catch (error) {
-      console.error("Error re-opening link:", error);
-      alert("Error al re-abrir enlace.");
-    }
-  };
-
-  // Direct Link Generation State
-  const [directTitle, setDirectTitle] = useState('');
-  const [directMonto, setDirectMonto] = useState('');
-  const [directEnganche, setDirectEnganche] = useState('');
-  const [isTestMode, setIsTestMode] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedLink, setGeneratedLink] = useState('');
-
-  useEffect(() => {
-    let q = query(
-      collection(db, 'investigations'),
-      where('clientProfile', '==', 'LOONG_MOTOR'),
-      orderBy('createdAt', 'desc')
-    );
-
-    // If not admin, only show own investigations
-    if (role !== 'ADMIN' && user?.email) {
-      q = query(
-        collection(db, 'investigations'),
-        where('clientProfile', '==', 'LOONG_MOTOR'),
-        where('requestedBy', '==', user.email),
-        orderBy('createdAt', 'desc')
-      );
-    }
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setInvestigations(docs);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching Loong Motor investigations:", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const handleGenerateDirectLink = async () => {
-    if (!directTitle.trim() || !directMonto || !directEnganche) {
-      alert("Por favor completa todos los campos para generar el enlace.");
-      return;
-    }
-
-    setIsGenerating(true);
-    try {
-      const invId = Math.random().toString(36).substring(2, 15);
-      const linkId = Math.random().toString(36).substring(2, 15);
-
-      const investigationData = {
-        id: invId,
-        clientId: user?.uid || 'admin_direct',
-        requestedBy: user?.email || 'admin',
-        status: 'PENDING',
-        title: directTitle,
-        clientProfile: 'LOONG_MOTOR',
-        investigationType: 'LOONG_MOTOR',
-        investigationScope: 'SIMPLE',
-        loongMontoTotal: directMonto,
-        loongEnganche: directEnganche,
-        isTestMode: isTestMode,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        createdByAdmin: true,
-        candidateLink: linkId // Store linkId for history access
-      };
-
-      await setDoc(doc(db, 'investigations', invId), investigationData);
-
-      await setDoc(doc(db, 'candidate_links', linkId), {
-        linkId,
-        investigationId: invId,
-        clientId: user?.uid || 'admin_direct',
-        clientProfile: 'LOONG_MOTOR',
-        investigationType: 'LOONG_MOTOR',
-        investigationScope: 'SIMPLE',
-        loongMontoTotal: directMonto,
-        loongEnganche: directEnganche,
-        title: directTitle,
-        status: 'PENDING',
-        isTestMode: isTestMode,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-
-      const url = `${window.location.origin}/candidate/${linkId}`;
-      setGeneratedLink(url);
-      
-      if (logUserAction && user) {
-        logUserAction(user.uid, 'ADMIN_LOONG_DIRECT_LINK', { linkId, invId, title: directTitle });
-      }
-
-      setDirectTitle('');
-      setDirectMonto('');
-      setDirectEnganche('');
-      alert('Enlace de Motocicleta generado exitosamente.');
-    } catch (error) {
-      console.error("Error generating direct link:", error);
-      alert("Error al generar enlace.");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Calculator className="w-6 h-6 text-red-600" />
-            Loong Motor - Motocicletas
-          </h2>
-          <p className="text-slate-500">
-            Gestión de solicitudes de crédito para motocicletas. 
-            <a href="/loong-motor" target="_blank" className="text-red-600 hover:underline ml-2 font-medium">
-              Abrir Generador Público (Sin Login)
-            </a>
-          </p>
-        </div>
-      </div>
-
-      {/* Direct Link Generator Section */}
-      <div className="bg-white p-6 rounded-2xl border border-red-200 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-          <Send className="w-5 h-5 text-red-600" />
-          Generar Enlace de Solicitud Directo (Sin Cliente)
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre del Sujeto</label>
-            <input 
-              type="text" 
-              value={directTitle} 
-              onChange={e => setDirectTitle(e.target.value)}
-              placeholder="Ej. Juan Pérez"
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-red-500 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Monto Total ($)</label>
-            <input 
-              type="number" 
-              value={directMonto} 
-              onChange={e => setDirectMonto(e.target.value)}
-              placeholder="0.00"
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-red-500 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Enganche (%)</label>
-            <input 
-              type="number" 
-              value={directEnganche} 
-              onChange={e => setDirectEnganche(e.target.value)}
-              placeholder="0"
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-red-500 text-sm"
-            />
-          </div>
-        </div>
-
-        <div className="mb-4 p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-900">Modo de Prueba</p>
-            <p className="text-[10px] text-slate-500">Permite captura de cámara remota para validación.</p>
-          </div>
-          <button 
-            type="button"
-            onClick={() => setIsTestMode(!isTestMode)}
-            className={`w-10 h-5 rounded-full transition-colors relative ${isTestMode ? 'bg-red-600' : 'bg-slate-300'}`}
-          >
-            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${isTestMode ? 'left-5.5' : 'left-0.5'}`} />
-          </button>
-        </div>
-
-        <button 
-          onClick={handleGenerateDirectLink}
-          disabled={isGenerating}
-          className="w-full py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          {isGenerating ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-          Generar Enlace de Motocicleta
-        </button>
-
-        {generatedLink && (
-          <div className="mt-4 p-4 bg-emerald-50 rounded-xl border border-emerald-100 animate-in fade-in slide-in-from-top-2">
-            <p className="text-sm font-bold text-emerald-900 mb-2">Enlace Generado:</p>
-            <div className="flex gap-2">
-              <input type="text" readOnly value={generatedLink} className="flex-1 px-3 py-2 bg-white border border-emerald-200 rounded-lg text-sm outline-none" />
-              <button 
-                onClick={() => {
-                  navigator.clipboard.writeText(generatedLink);
-                  alert('Copiado');
-                }}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold"
-              >
-                Copiar
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h3 className="text-xs font-bold text-slate-500 uppercase mb-2">Total Solicitudes</h3>
-          <p className="text-2xl font-bold text-slate-900">{investigations.length}</p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h3 className="text-xs font-bold text-slate-500 uppercase mb-2">Viables</h3>
-          <p className="text-2xl font-bold text-emerald-600">
-            {investigations.filter(i => i.status === 'COMPLETED').length}
-          </p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h3 className="text-xs font-bold text-slate-500 uppercase mb-2">Pendientes</h3>
-          <p className="text-2xl font-bold text-amber-600">
-            {investigations.filter(i => i.status === 'PENDING' || i.status === 'IN_PROGRESS').length}
-          </p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h3 className="text-xs font-bold text-slate-500 uppercase mb-2">Monto Total</h3>
-          <p className="text-2xl font-bold text-blue-600">
-            ${investigations.reduce((acc, i) => acc + (Number(i.loongMontoTotal) || 0), 0).toLocaleString()}
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
-          <h3 className="font-bold text-slate-900">Historial de Solicitudes Motocicletas</h3>
-        </div>
-        <div className="divide-y divide-slate-200">
-          {investigations.length === 0 ? (
-            <div className="p-12 text-center">
-              <Calculator className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-              <p className="text-slate-500">No hay solicitudes de Loong Motor registradas.</p>
-            </div>
-          ) : (
-            investigations.map((inv) => (
-              <div key={inv.id} className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-red-50 text-red-600 flex items-center justify-center flex-shrink-0">
-                    <Calculator className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">LOONG-{inv.id.substring(0, 6)}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        inv.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
-                        inv.status === 'PENDING' ? 'bg-slate-200 text-slate-700' :
-                        inv.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
-                        'bg-amber-100 text-amber-700'
-                      }`}>
-                        {inv.status}
-                      </span>
-                    </div>
-                    <h4 className="font-bold text-slate-900">{inv.title}</h4>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {new Date(inv.createdAt).toLocaleDateString()}
-                      </span>
-                      <span className="font-bold text-red-600">
-                        ${Number(inv.loongMontoTotal || 0).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {inv.candidateLink && (
-                    <button 
-                      onClick={() => {
-                        const url = `${window.location.origin}/candidate/${inv.candidateLink}`;
-                        navigator.clipboard.writeText(url);
-                        alert('Enlace copiado');
-                      }}
-                      className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-200 transition-colors flex items-center gap-2"
-                    >
-                      <LinkIcon className="w-4 h-4" />
-                      Copiar Enlace
-                    </button>
-                  )}
-                  <button 
-                    onClick={() => setSelectedInv(inv)}
-                    className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 transition-colors"
-                  >
-                    Ver Dictamen
-                  </button>
-                  {inv.status === 'COMPLETED' && (
-                    <button 
-                      onClick={() => handleReopen(inv)}
-                      className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                      title="Re-abrir Enlace"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                    </button>
-                  )}
-                  {inv.status === 'COMPLETED' && (
-                    <button 
-                      className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {selectedInv && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-              <div className="flex items-center gap-3">
-                <Calculator className="w-5 h-5 text-red-600" />
-                <h3 className="text-lg font-bold text-slate-900">Detalle de Dictamen Loong Motor</h3>
-              </div>
-              <button onClick={() => setSelectedInv(null)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto flex-1">
-              <AIResultRenderer 
-                resultString={selectedInv.socioeconomicDictamen} 
-                investigationData={selectedInv}
-                onRestart={() => handleRestartAI(selectedInv)}
-                isRestarting={isRestarting}
-              />
             </div>
           </div>
         </div>

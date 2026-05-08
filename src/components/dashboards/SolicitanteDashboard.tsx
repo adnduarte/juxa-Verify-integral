@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Download, CheckCircle2, Clock, AlertCircle, Briefcase, Building2, Link as LinkIcon } from 'lucide-react';
 import { db, auth } from '../../firebase';
-import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, orderBy } from '@/lib/localFirestore';
 import { jsPDF } from 'jspdf';
 import { useAuthStatus } from '../../contexts/AuthContext';
 

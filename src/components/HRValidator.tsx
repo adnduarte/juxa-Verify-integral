@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { ShieldCheck, Loader2, AlertCircle, MapPin, CheckCircle2, FileText, Map as MapIcon, ChevronRight, ChevronLeft, Image as ImageIcon, Briefcase, Download, PlayCircle } from 'lucide-react';
 import { analyzeCandidateData } from '../lib/gemini';
 import { AIResultRenderer } from './AIResultRenderer';
+import { IdentityAntiUsurpationPanel } from './IdentityAntiUsurpationPanel';
 import { useJsApiLoader, Autocomplete, GoogleMap, StreetViewPanorama, Marker } from '@react-google-maps/api';
 
 const MAX_ACCURACY_METERS = 50;
@@ -797,6 +798,10 @@ export function HRValidator() {
             <div className="bg-neutral-900 p-6 sm:p-8 rounded-2xl border border-neutral-800 shadow-xl">
               <AIResultRenderer resultString={result} />
             </div>
+            <IdentityAntiUsurpationPanel
+              compact
+              caseSummary={`RRHH México. Candidato: ${candidateName}. Vacante: ${vacancy}. Extracto estudio: ${result.slice(0, 4000)}`}
+            />
           </div>
         )}
 

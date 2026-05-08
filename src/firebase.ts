@@ -1,12 +1,31 @@
 import { initializeApp } from 'firebase/app';
+import type { Auth } from 'firebase/auth';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore } from '@/lib/localFirestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
+import { getLocalAuthOverlayUser } from './lib/localAuthOverlay';
 
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const auth = getAuth(app);
+
+const rawAuth = getAuth(app);
+
+/** En dev sin Auth Firebase, `currentUser` refleja la sesión local (ver `localAuthOverlay`). */
+export const auth = new Proxy(rawAuth, {
+  get(target, prop, receiver) {
+    if (prop === 'currentUser') {
+      const local = getLocalAuthOverlayUser();
+      if (local) return local;
+    }
+    const value = Reflect.get(target, prop, receiver);
+    if (typeof value === 'function') {
+      return (value as (...a: unknown[]) => unknown).bind(target);
+    }
+    return value;
+  },
+}) as unknown as Auth;
+
 export const storage = getStorage(app);
 
 // Secondary auth for bootstrapping users without affecting current session

@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useAuthStatus } from '../contexts/AuthContext';
+import { useTenant } from '../contexts/TenantContext';
 import { Navigate, useLocation } from 'react-router-dom';
-import { ShieldCheck, Mail, Lock, AlertCircle, Phone } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, AlertCircle, Phone, FlaskConical, LogIn } from 'lucide-react';
 import firebaseConfig from '../../firebase-applet-config.json';
+import { DEV_LOCAL_PERSONAS, DEV_LOCAL_PASSWORD } from '../lib/devLocalBootstrap';
 
 export const Login: React.FC = () => {
-  const { user, login, loginWithEmail, registerWithEmail, resetPassword, loading, logUserAction } = useAuthStatus();
+  const { user, login, loginWithEmail, registerWithEmail, resetPassword, loading } = useAuthStatus();
+  const { branding } = useTenant();
   const location = useLocation();
   const from = location.state?.from?.pathname || '/dashboard';
 
@@ -16,6 +19,38 @@ export const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const displayName = branding.appName?.trim() || 'Juxa Verify';
+  const primary = branding.primaryColor?.trim() || '#2563eb';
+
+  useEffect(() => {
+    document.title = `${displayName} · Acceso`;
+  }, [displayName]);
+
+  const quickLogin = useCallback(
+    async (targetEmail: string) => {
+      setError('');
+      setSuccess('');
+      setEmail(targetEmail);
+      setPassword(DEV_LOCAL_PASSWORD);
+      setIsSubmitting(true);
+      try {
+        if (loginWithEmail) {
+          await loginWithEmail(targetEmail, DEV_LOCAL_PASSWORD);
+        }
+      } catch (err: unknown) {
+        const e = err as { code?: string; message?: string };
+        if (e.code === 'auth/invalid-credential' || e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') {
+          setError('Credencial dev inválida. Verifica el correo o reinicia la app para volver a sembrar el modo local.');
+        } else {
+          setError(e.message || 'Error al entrar.');
+        }
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [loginWithEmail]
+  );
 
   if (loading) {
     return (
@@ -69,15 +104,49 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 py-12 px-4 sm:px-6 lg:px-8 gap-8">
+      {import.meta.env.DEV && (
+        <div className="max-w-3xl w-full rounded-2xl border border-amber-200 bg-amber-50/80 p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2 text-amber-900">
+              <FlaskConical className="w-5 h-5 shrink-0" />
+              <span className="font-bold text-sm">Modo desarrollo local</span>
+            </div>
+          </div>
+          <p className="text-xs text-amber-900/90 mb-3">
+            Datos y sesión <strong>en memoria local</strong> (sin Firebase). Las personas y organizaciones demo se
+            siembran automáticamente al cargar la app. Contraseña común:{' '}
+            <strong>{DEV_LOCAL_PASSWORD}</strong>. Para conectar a Firebase real, define{' '}
+            <code className="bg-white/80 px-1 rounded">VITE_USE_FIREBASE=true</code> en <code>.env.local</code>.
+          </p>
+          <p className="text-[10px] text-amber-800/80 mb-2">Entrar como:</p>
+          <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+            {DEV_LOCAL_PERSONAS.map((p) => (
+              <button
+                key={p.email}
+                type="button"
+                onClick={() => quickLogin(p.email)}
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md bg-white border border-amber-300 text-amber-950 hover:bg-amber-100 disabled:opacity-50"
+                title={p.email}
+              >
+                <LogIn className="w-3 h-3 shrink-0" />
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
         <div className="text-center">
-          <div className="mx-auto w-12 h-12 bg-blue-600 text-white flex items-center justify-center rounded-xl font-bold shadow-sm mb-4">
+          <div
+            className="mx-auto w-12 h-12 text-white flex items-center justify-center rounded-xl font-bold shadow-sm mb-4"
+            style={{ backgroundColor: primary }}
+          >
             JX
           </div>
-          <h2 className="mt-6 text-3xl font-extrabold text-slate-900">
-            JUXA Recoverytech
-          </h2>
+          <h2 className="mt-6 text-3xl font-extrabold text-slate-900 tracking-tight">{displayName}</h2>
           <p className="mt-2 text-sm text-slate-500">
             {isLogin ? 'Inicia sesión para acceder a tu panel de control' : 'Crea una cuenta para comenzar'}
           </p>
@@ -180,7 +249,8 @@ export const Login: React.FC = () => {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-xl text-white bg-slate-900 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ backgroundColor: primary }}
+              className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-xl text-white hover:opacity-92 focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? 'Procesando...' : (isLogin ? 'Iniciar Sesión' : 'Registrarse')}
             </button>

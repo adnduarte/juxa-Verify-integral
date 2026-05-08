@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { FileText, Download, CheckCircle2, Clock, AlertCircle, X, Plus, Briefcase, Building2, Link as LinkIcon, Send, ShieldAlert, ExternalLink, Code, Bot, Trash2, Brain, MapPin, User, FileCheck, Image as ImageIcon, Calculator, ClipboardCheck, Search, LayoutDashboard, CreditCard, Settings } from 'lucide-react';
 import { db, auth } from '../../firebase';
-import { collection, addDoc, doc, setDoc, onSnapshot, query, where, orderBy, updateDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc, onSnapshot, query, where, orderBy, updateDoc, getDoc, deleteDoc } from '@/lib/localFirestore';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import DOMPurify from 'dompurify';
 import { useAuthStatus } from '../../contexts/AuthContext';
+import { useTenant } from '../../contexts/TenantContext';
 import { DashboardLayout } from './DashboardLayout';
 import { IAConfigPanel } from './IAConfigPanel';
 import { AIResultRenderer } from '../AIResultRenderer';
@@ -15,9 +16,12 @@ import { LocationViewer } from '../LocationViewer';
 import { CreditApplicationsModule } from './CreditApplicationsModule';
 import { handleFirestoreError, OperationType } from '../../firebase';
 import { analyzeCandidateData } from '../../lib/gemini';
+import { canAccessClientAccountSettings } from '../../lib/clientAccountAccess';
+import { MEXICO_ENTITY_STATES } from '../../lib/mexicoEntityStates';
+import { getCreditCrmCapabilities } from '../../lib/creditCrmCapabilities';
 
 export const ClientDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'INVESTIGATIONS' | 'CREDIT_APPS' | 'LOONG_MOTOR' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'INVESTIGATIONS' | 'CREDIT_APPS' | 'settings'>('overview');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPagareModalOpen, setIsPagareModalOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -25,11 +29,16 @@ export const ClientDashboard: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [userCredits, setUserCredits] = useState<number | null>(null);
-  const [pagaresCredits, setPagaresCredits] = useState<number | null>(null);
   const [clientType, setClientType] = useState<string | null>(null);
   const [investigations, setInvestigations] = useState<any[]>([]);
-  const { user, logUserAction, logout } = useAuthStatus();
-  
+  const { user, organizationId, logUserAction, role, clientAccountRole } = useAuthStatus();
+  const { organization } = useTenant();
+  const partnerVertical = organization?.partnerVertical && organization.partnerVertical !== 'NONE'
+    ? organization.partnerVertical
+    : null;
+  const isFordVertical = partnerVertical === 'FORD_CREDIT_MX';
+  const isEnterpriseClient = clientType === 'EMPRESARIAL';
+
   // New state for dynamic forms
   const [investigationType, setInvestigationType] = useState<'HR' | 'CREDIT' | 'GENERAL'>('HR');
   const [isDirectInvestigation, setIsDirectInvestigation] = useState(false);
@@ -48,13 +57,23 @@ export const ClientDashboard: React.FC = () => {
     buroCredito: 'Excelente'
   });
 
-  const sidebarItems = [
-    { id: 'overview', label: 'Resumen', icon: LayoutDashboard },
-    { id: 'INVESTIGATIONS', label: 'Investigaciones', icon: Search },
-    { id: 'LOONG_MOTOR', label: 'Loong Motor', icon: Calculator },
-    { id: 'CREDIT_APPS', label: 'Solicitudes de Crédito', icon: CreditCard },
-    { id: 'settings', label: 'Configuración', icon: Settings },
-  ];
+  const showAccountSettings = canAccessClientAccountSettings(role, clientAccountRole);
+
+  const sidebarItems = useMemo(() => {
+    const base = [
+      { id: 'overview', label: 'Resumen', icon: LayoutDashboard },
+      { id: 'INVESTIGATIONS', label: 'Investigaciones', icon: Search },
+      { id: 'CREDIT_APPS', label: 'Solicitudes de Crédito', icon: CreditCard },
+    ];
+    if (!showAccountSettings) return base;
+    return [...base, { id: 'settings', label: 'Configuración', icon: Settings }];
+  }, [showAccountSettings]);
+
+  useEffect(() => {
+    if (!showAccountSettings && activeTab === 'settings') {
+      setActiveTab('overview');
+    }
+  }, [showAccountSettings, activeTab]);
   
   // HR specific fields
   const [jobProfile, setJobProfile] = useState('');
@@ -70,6 +89,8 @@ export const ClientDashboard: React.FC = () => {
   const [tipoCredito, setTipoCredito] = useState('Personal');
   const [loongMontoTotal, setLoongMontoTotal] = useState('');
   const [loongEnganche, setLoongEnganche] = useState('');
+  const [contractReference, setContractReference] = useState('');
+  const [entityState, setEntityState] = useState('');
 
   // Provider specific fields
   const [providerReferences, setProviderReferences] = useState<File | null>(null);
@@ -327,21 +348,29 @@ export const ClientDashboard: React.FC = () => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setUserCredits(data.credits || 0);
-        setPagaresCredits(data.pagaresCredits || 0);
         setClientType(data.clientType || 'GRATUITO');
       }
     });
 
-    const q = query(
-      collection(db, 'investigations'),
-      where('clientId', '==', auth.currentUser.uid),
-      orderBy('createdAt', 'desc')
-    );
+    const orgId = organizationId || 'default';
+    const q =
+      isFordVertical && orgId
+        ? query(
+            collection(db, 'investigations'),
+            where('organizationId', '==', orgId),
+            where('vertical', '==', 'FORD_CREDIT_MX'),
+            orderBy('createdAt', 'desc')
+          )
+        : query(
+            collection(db, 'investigations'),
+            where('clientId', '==', auth.currentUser.uid),
+            orderBy('createdAt', 'desc')
+          );
 
     const unsubscribeInv = onSnapshot(q, (snapshot) => {
-      const invs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
+      const invs = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
       }));
       setInvestigations(invs);
     });
@@ -350,7 +379,7 @@ export const ClientDashboard: React.FC = () => {
       unsubscribeUser();
       unsubscribeInv();
     };
-  }, []);
+  }, [isFordVertical, organizationId]);
 
   const handleDirectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -448,12 +477,15 @@ export const ClientDashboard: React.FC = () => {
         id: investigationId,
         clientId: auth.currentUser.uid,
         requestedBy: auth.currentUser.uid,
+        organizationId: organizationId || 'default',
+        ...(partnerVertical ? { vertical: partnerVertical } : {}),
         status: 'PENDING',
         title,
         details,
         clientProfile: investigationType,
         investigationType,
         investigationScope: investigationType === 'CREDIT' ? investigationScope : 'INTEGRAL',
+        creditPipelineStage: investigationType === 'CREDIT' ? 'PRE_QUALIFICATION' : undefined,
         isDirect: isDirectInvestigation,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -493,15 +525,14 @@ export const ClientDashboard: React.FC = () => {
           montoCreditoIntereses,
           plazoFinanciamiento,
           tipoCredito,
-          creditAppFileName: creditApp ? creditApp.name : null
-        };
-      } else if (investigationType === ('LOONG_MOTOR' as any)) {
-        investigationData = {
-          ...investigationData,
-          loongMontoTotal,
-          loongEnganche,
-          tipoCredito: 'Motocicletas',
-          investigationScope: 'SIMPLE'
+          creditAppFileName: creditApp ? creditApp.name : null,
+          ...(contractReference.trim()
+            ? { contractReference: contractReference.trim() }
+            : {}),
+          ...(entityState.trim() ? { entityState: entityState.trim().toUpperCase() } : {}),
+          ...(loongMontoTotal || loongEnganche
+            ? { loongMontoTotal: loongMontoTotal || null, loongEnganche: loongEnganche || null }
+            : {}),
         };
       }
 
@@ -529,11 +560,13 @@ export const ClientDashboard: React.FC = () => {
             linkId: candidateLinkId,
             investigationId: actualInvestigationId,
             clientId: auth.currentUser.uid,
+            organizationId: organizationId || 'default',
+            ...(partnerVertical ? { vertical: partnerVertical } : {}),
             clientProfile: investigationType,
             investigationType,
             investigationScope: investigationType === 'CREDIT' ? investigationScope : 'INTEGRAL',
-            loongMontoTotal: investigationType === ('LOONG_MOTOR' as any) ? loongMontoTotal : null,
-            loongEnganche: investigationType === ('LOONG_MOTOR' as any) ? loongEnganche : null,
+            loongMontoTotal: investigationType === 'CREDIT' && loongMontoTotal ? loongMontoTotal : null,
+            loongEnganche: investigationType === 'CREDIT' && loongEnganche ? loongEnganche : null,
             title: title,
             status: 'PENDING',
             createdAt: new Date().toISOString(),
@@ -593,6 +626,8 @@ export const ClientDashboard: React.FC = () => {
     setTipoCredito('Personal');
     setLoongMontoTotal('');
     setLoongEnganche('');
+    setContractReference('');
+    setEntityState('');
     setCreditApp(null);
     setProviderReferences(null);
     setProviderFiles(null);
@@ -718,13 +753,6 @@ export const ClientDashboard: React.FC = () => {
     e.preventDefault();
     if (!auth.currentUser) return;
     
-    // Check credits
-    const isUnlimitedUser = auth.currentUser.email === 'contacto@inaeecij.com';
-    if (!isUnlimitedUser && (pagaresCredits === null || pagaresCredits <= 0)) {
-      alert('No tienes créditos de pagarés suficientes. Por favor, adquiere más créditos.');
-      return;
-    }
-
     const formData = new FormData(e.currentTarget);
     const pagareData = {
       monto: formData.get('monto') as string,
@@ -739,14 +767,6 @@ export const ClientDashboard: React.FC = () => {
     };
 
     try {
-      // Deduct credit
-      if (!isUnlimitedUser && pagaresCredits !== null && pagaresCredits > 0) {
-        const userRef = doc(db, 'users', auth.currentUser.uid);
-        await updateDoc(userRef, {
-          pagaresCredits: pagaresCredits - 1
-        });
-      }
-
       if (logUserAction && user) {
         logUserAction(user.uid, 'CLIENT_GENERATE_PAGARE', { amount: pagareData.monto, debtor: pagareData.deudorNombre });
       }
@@ -789,12 +809,20 @@ export const ClientDashboard: React.FC = () => {
 
   return (
     <DashboardLayout
-      title="Panel de Cliente"
+      title={isFordVertical ? 'Panel F&I · Ford Crédito México' : 'Panel de Cliente'}
       subtitle={user?.email || ''}
       sidebarItems={sidebarItems}
       activeTab={activeTab}
       onTabChange={(id) => setActiveTab(id as any)}
     >
+      {isFordVertical && (
+        <div className="px-4 sm:px-8 pt-4">
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 flex flex-wrap items-center gap-2">
+            <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wider">Ford Crédito MX</span>
+            Originación desde la agencia. Cada solicitud arranca con preanálisis de identidad y solicitud de crédito; mesa de control puede regresar el expediente si falta información.
+          </div>
+        </div>
+      )}
       {activeTab === 'overview' && (
         <div className="p-4 sm:p-8">
           <div className="flex justify-between items-center mb-6">
@@ -803,19 +831,21 @@ export const ClientDashboard: React.FC = () => {
               {clientType === 'BOLSA' && (
                 <div className="flex gap-4 mt-1">
                   <p className="text-sm text-slate-500">Créditos Inv.: <span className="font-bold text-slate-900">{userCredits}</span></p>
-                  <p className="text-sm text-slate-500">Créditos Pagarés: <span className="font-bold text-slate-900">{pagaresCredits}</span></p>
                 </div>
               )}
               {clientType === 'SUSCRIPCION' && (
                 <div className="flex gap-4 mt-1">
                   <p className="text-sm text-emerald-600 font-medium">Suscripción Activa</p>
-                  <p className="text-sm text-slate-500">Créditos Pagarés: <span className="font-bold text-slate-900">{pagaresCredits}</span></p>
+                </div>
+              )}
+              {isEnterpriseClient && (
+                <div className="flex gap-4 mt-1">
+                  <p className="text-sm text-indigo-600 font-medium">Plan Empresarial · investigaciones sin límite de folios</p>
                 </div>
               )}
               {clientType === 'GRATUITO' && (
                 <div className="flex gap-4 mt-1">
                   <p className="text-sm text-blue-600 font-medium">Plan Gratuito ({investigations.length}/10 investigaciones usadas)</p>
-                  <p className="text-sm text-slate-500">Créditos Pagarés: <span className="font-bold text-slate-900">{pagaresCredits}</span></p>
                 </div>
               )}
             </div>
@@ -823,7 +853,7 @@ export const ClientDashboard: React.FC = () => {
               <button 
                 onClick={() => {
                   const isUnlimitedUser = auth.currentUser?.email === 'contacto@inaeecij.com';
-                  if (!isUnlimitedUser && clientType === 'GRATUITO' && investigations.length >= 10) {
+                  if (!isUnlimitedUser && !isEnterpriseClient && clientType === 'GRATUITO' && investigations.length >= 10) {
                     alert('Has alcanzado el límite de 10 investigaciones gratuitas. Por favor, actualiza tu plan para continuar.');
                     return;
                   }
@@ -834,130 +864,6 @@ export const ClientDashboard: React.FC = () => {
                 <Plus className="w-4 h-4 mr-2" />
                 Solicitar Nueva Investigación
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'LOONG_MOTOR' && (
-        <div className="p-4 sm:p-8">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-900">Loong Motor</h2>
-              <p className="text-slate-500">Gestión de solicitudes de crédito de motocicletas con IA.</p>
-            </div>
-            <button 
-              onClick={() => {
-                setInvestigationType('LOONG_MOTOR' as any);
-                setIsModalOpen(true);
-              }}
-              className="px-6 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-200 flex items-center justify-center gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              Nueva Solicitud Loong Motor
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-slate-500">Solicitudes Loong</h3>
-                <Calculator className="w-5 h-5 text-red-500" />
-              </div>
-              <p className="text-3xl font-bold text-slate-900">
-                {investigations.filter(i => i.clientProfile === 'LOONG_MOTOR').length}
-              </p>
-            </div>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-slate-500">Viables</h3>
-                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-              </div>
-              <p className="text-3xl font-bold text-slate-900">
-                {investigations.filter(i => i.clientProfile === 'LOONG_MOTOR' && i.status === 'COMPLETED').length}
-              </p>
-            </div>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-slate-500">Pendientes</h3>
-                <Clock className="w-5 h-5 text-amber-500" />
-              </div>
-              <p className="text-3xl font-bold text-slate-900">
-                {investigations.filter(i => i.clientProfile === 'LOONG_MOTOR' && (i.status === 'PENDING' || i.status === 'IN_PROGRESS')).length}
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-900">Historial Loong Motor</h2>
-              <span className="px-2 py-1 bg-red-100 text-red-700 text-[10px] font-bold rounded uppercase tracking-widest">
-                Motocicletas
-              </span>
-            </div>
-            
-            <div className="divide-y divide-slate-200">
-              {investigations.filter(i => i.clientProfile === 'LOONG_MOTOR').length === 0 ? (
-                <div className="p-8 text-center text-slate-500">
-                  No hay solicitudes de Loong Motor registradas.
-                </div>
-              ) : (
-                investigations.filter(i => i.clientProfile === 'LOONG_MOTOR').map((inv) => (
-                  <div key={inv.id} className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-start gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-red-50 text-red-600 flex items-center justify-center flex-shrink-0 mt-1">
-                        <Calculator className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">LOONG-{inv.id.substring(0, 6)}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            inv.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
-                            inv.status === 'PENDING' ? 'bg-slate-200 text-slate-700' :
-                            inv.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
-                            'bg-amber-100 text-amber-700'
-                          }`}>
-                            {inv.status === 'COMPLETED' ? 'Completado' : 
-                             inv.status === 'PENDING' ? 'Pendiente' : 
-                             inv.status === 'IN_PROGRESS' ? 'En Proceso' : 'Atención'}
-                          </span>
-                        </div>
-                        <h4 className="font-bold text-slate-900">{inv.title}</h4>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {new Date(inv.createdAt).toLocaleDateString()}
-                          </span>
-                          {inv.loongMontoTotal && (
-                            <span className="font-bold text-red-600">
-                              ${Number(inv.loongMontoTotal).toLocaleString()} ({inv.loongEnganche}%)
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => setSelectedInvestigation(inv)}
-                        className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors flex items-center gap-2"
-                      >
-                        <FileText className="w-4 h-4" />
-                        Ver Detalles
-                      </button>
-                      {inv.status === 'COMPLETED' && (
-                        <button 
-                          onClick={() => handleDownloadPDF(inv)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Descargar Dictamen PDF"
-                        >
-                          <Download className="w-5 h-5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
             </div>
           </div>
         </div>
@@ -1163,7 +1069,21 @@ export const ClientDashboard: React.FC = () => {
   )}
 
       {activeTab === 'CREDIT_APPS' && (
-        <CreditApplicationsModule investigations={investigations} />
+        <CreditApplicationsModule
+          investigations={investigations}
+          profiles={['CREDIT', 'FORD_CREDIT_MX']}
+          vertical={isFordVertical ? 'FORD_CREDIT_MX' : undefined}
+          agencyLabelByOrgId={
+            organizationId && organization?.name
+              ? { [organizationId]: organization.name }
+              : undefined
+          }
+          capabilities={getCreditCrmCapabilities({
+            context: 'client',
+            role,
+            clientAccountRole,
+          })}
+        />
       )}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -1307,27 +1227,6 @@ export const ClientDashboard: React.FC = () => {
                       {investigationType === 'GENERAL' && <CheckCircle2 className="w-5 h-5 text-blue-600 ml-2" />}
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setInvestigationType('LOONG_MOTOR' as any);
-                        setInvestigationScope('SIMPLE');
-                      }}
-                      className={`flex items-center p-4 rounded-2xl border-2 transition-all text-left ${
-                        investigationType === ('LOONG_MOTOR' as any)
-                          ? 'border-red-600 bg-red-50 ring-4 ring-red-500/10'
-                          : 'border-slate-200 hover:border-red-200 bg-white'
-                      }`}
-                    >
-                      <div className={`p-3 rounded-xl mr-4 ${investigationType === ('LOONG_MOTOR' as any) ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                        <Briefcase className="w-6 h-6" />
-                      </div>
-                      <div className="flex-1">
-                        <p className={`font-bold ${investigationType === ('LOONG_MOTOR' as any) ? 'text-red-900' : 'text-slate-900'}`}>Loong Motor</p>
-                        <p className="text-xs text-slate-500">Crédito de Motocicletas Especializado.</p>
-                      </div>
-                      {investigationType === ('LOONG_MOTOR' as any) && <CheckCircle2 className="w-5 h-5 text-red-600 ml-2" />}
-                    </button>
                   </div>
                 </div>
 
@@ -1456,48 +1355,42 @@ export const ClientDashboard: React.FC = () => {
                   </div>
                 )}
 
-                {/* Loong Motor Specific Fields */}
-                {investigationType === ('LOONG_MOTOR' as any) && (
-                  <div className="p-6 bg-red-50 rounded-2xl border border-red-100 space-y-4">
-                    <h4 className="text-sm font-bold text-red-900 flex items-center">
-                      <Calculator className="w-4 h-4 mr-2" />
-                      Configuración de Financiamiento Loong Motor
+                {investigationType === 'CREDIT' && (
+                  <div className="p-6 bg-blue-50/80 rounded-2xl border border-blue-100 space-y-4">
+                    <h4 className="text-sm font-bold text-blue-900 flex items-center">
+                      <CreditCard className="w-4 h-4 mr-2" />
+                      Financiamiento (opcional)
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-medium text-red-900 mb-1">Monto Total (Capital + Intereses)</label>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">Monto total solicitado</label>
                         <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-red-400 font-bold">$</span>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
                           <input
                             type="number"
-                            required
                             value={loongMontoTotal}
                             onChange={(e) => setLoongMontoTotal(e.target.value)}
-                            className="w-full pl-7 pr-3 py-2 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                            className="w-full pl-7 pr-3 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
                             placeholder="0.00"
                           />
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-red-900 mb-1">Porcentaje de Enganche (%)</label>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">Enganche (%)</label>
                         <div className="relative">
                           <input
                             type="number"
-                            required
                             min="0"
                             max="100"
                             value={loongEnganche}
                             onChange={(e) => setLoongEnganche(e.target.value)}
-                            className="w-full pr-8 pl-3 py-2 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                            className="w-full pr-8 pl-3 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
                             placeholder="Ej. 30"
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-red-400 font-bold">%</span>
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">%</span>
                         </div>
                       </div>
                     </div>
-                    <p className="text-[10px] text-red-600 italic">
-                      * El sistema aplicará reglas de flexibilidad si el enganche es superior al 30%.
-                    </p>
                   </div>
                 )}
 
@@ -1630,6 +1523,37 @@ export const ClientDashboard: React.FC = () => {
                               <option value="Grupal">Grupal</option>
                               <option value="Otro">Otro</option>
                             </select>
+                          </div>
+                          <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-medium text-emerald-900 mb-1">
+                                Referencia / número de contrato <span className="text-slate-400 font-normal">(opcional)</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={contractReference}
+                                onChange={(e) => setContractReference(e.target.value)}
+                                className="w-full px-3 py-2 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-white"
+                                placeholder="Ej. folio interno o contrato"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-emerald-900 mb-1">
+                                Entidad federativa <span className="text-slate-400 font-normal">(opcional)</span>
+                              </label>
+                              <select
+                                value={entityState}
+                                onChange={(e) => setEntityState(e.target.value)}
+                                className="w-full px-3 py-2 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-white"
+                              >
+                                <option value="">— Seleccionar —</option>
+                                {MEXICO_ENTITY_STATES.map((s) => (
+                                  <option key={s.code} value={s.code}>
+                                    {s.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
                         </div>
                       </div>

@@ -1,0 +1,63 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientProfile", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientId", "order": "ASCENDING" },
+        { "fieldPath": "clientProfile", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "vertical", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "vertical", "order": "ASCENDING" },
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ford_agency_onboarding_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "proposedOrganizationId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ford_agency_onboarding_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "programVertical", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

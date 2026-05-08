@@ -7,6 +7,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { ShieldCheck, LogOut, Settings, Users, FileText, LayoutDashboard, Search } from 'lucide-react';
 import { AuthProvider, useAuthStatus } from './contexts/AuthContext';
+import { TenantProvider } from './contexts/TenantContext';
 import { Toaster } from 'react-hot-toast';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
@@ -15,7 +16,6 @@ import { Landing } from './pages/Landing';
 import { AdminDashboard } from './components/dashboards/AdminDashboard';
 import { Dashboard } from './pages/Dashboard';
 import { CandidateFlow } from './pages/CandidateFlow';
-import { LoongMotorPublic } from './pages/LoongMotorPublic';
 
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -62,6 +62,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
+        <TenantProvider>
         <Toaster position="top-center" reverseOrder={false} />
         <Router>
           <Routes>
@@ -69,13 +70,13 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/unauthorized" element={<Unauthorized />} />
             <Route path="/candidate/:linkId" element={<CandidateFlow />} />
-            <Route path="/loong-motor" element={<LoongMotorPublic />} />
-            
+            <Route path="/loong-motor" element={<Navigate to="/login" replace />} />
+
             {/* Dashboard Route (Conditional rendering inside) */}
             <Route
               path="/dashboard"
               element={
-                <ProtectedRoute allowedRoles={['ADMIN', 'EJECUTIVO_VENTAS', 'ANALISTA_MESA_CONTROL', 'GERENTE_DIRECTIVO', 'ANALISTA_CREDITO', 'INVESTIGADOR_SOCIAL', 'REVISOR_RRHH', 'SOLICITANTE', 'INVESTIGADOR', 'CLIENTE']}>
+                <ProtectedRoute allowedRoles={['ADMIN', 'EJECUTIVO_VENTAS', 'ANALISTA_MESA_CONTROL', 'FORD_SUPERVISOR_GERENCIA', 'FORD_SUPERVISOR_DIRECCION', 'GERENTE_DIRECTIVO', 'ANALISTA_CREDITO', 'INVESTIGADOR_SOCIAL', 'REVISOR_RRHH', 'SOLICITANTE', 'INVESTIGADOR', 'CLIENTE', 'CLIENTE_FINANCIERO', 'OPERADOR_CAMPO', 'OPERADOR_RED_VISITAS']}>
                   <Layout>
                     <Dashboard />
                   </Layout>
@@ -99,6 +100,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </Router>
+        </TenantProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

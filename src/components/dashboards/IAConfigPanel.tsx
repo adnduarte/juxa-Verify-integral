@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bot, ShieldCheck, CreditCard, Users, Save, AlertCircle, Building2 } from 'lucide-react';
 import { db } from '../../firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from '@/lib/localFirestore';
 import { useAuthStatus } from '../../contexts/AuthContext';
 
 export const IAConfigPanel: React.FC = () => {

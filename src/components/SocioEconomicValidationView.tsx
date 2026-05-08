@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle2, AlertTriangle, MapPin, DollarSign, FileText, Loader2, RefreshCw, Image as ImageIcon } from 'lucide-react';
 import { AIResultRenderer, DocumentComparison } from './AIResultRenderer';
+import { useAuthStatus } from '../contexts/AuthContext';
+import { postJson } from '../services/platformApi';
 
 export interface ValidationResult {
   congruenciaIngresos: {
@@ -38,6 +40,7 @@ export const SocioEconomicValidationView: React.FC<Props> = ({
   investigationData,
   isRestarting = false
 }) => {
+  const { organizationId } = useAuthStatus();
   const [loading, setLoading] = useState(!data);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ValidationResult | null>(data || null);
@@ -55,33 +58,38 @@ export const SocioEconomicValidationView: React.FC<Props> = ({
     const fetchValidation = async () => {
       try {
         setLoading(true);
-        // Simulación de llamada a la API Route / Cloud Function
-        // const response = await fetch('/api/validate-sse', {
-        //   method: 'POST',
-        //   body: JSON.stringify({ caseId })
-        // });
-        // const data = await response.json();
-        
-        // Mock data para demostración
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const mockData: ValidationResult = {
-          congruenciaIngresos: {
-            verificado: true,
-            nivelSocioeconomicoInferido: 'Medio-Alto',
-            detalles: 'Los ingresos declarados ($50,000 MXN) son congruentes con los recibos de nómina analizados por la IA.'
-          },
-          congruenciaDomicilio: {
-            verificado: true,
-            distanciaMetros: 15,
-            detalles: 'Las coordenadas GPS de la visita coinciden con la dirección declarada. La fachada coincide con Street View.'
-          },
-          dictamenFinal: {
-            estado: 'Congruente',
-            resumen: 'No se detectaron inconsistencias entre las declaraciones del candidato y la evidencia documental/geográfica. Perfil apto.'
-          }
+        setError(null);
+        const payload = {
+          caseId,
+          investigationData: investigationData ?? null,
         };
-        
-        setResult(mockData);
+        try {
+          const api = await postJson<{ result: ValidationResult }>('/api/ia/validate-socioeconomic', {
+            payload,
+            organizationId: organizationId || 'default',
+          });
+          setResult(api.result);
+        } catch {
+          await new Promise((r) => setTimeout(r, 800));
+          const mockData: ValidationResult = {
+            congruenciaIngresos: {
+              verificado: true,
+              nivelSocioeconomicoInferido: 'Medio-Alto',
+              detalles:
+                'Motor servidor no disponible: dictamen demo. Ejecute `npm run dev:all` y configure GEMINI_API_KEY para cruce IA en servidor.',
+            },
+            congruenciaDomicilio: {
+              verificado: true,
+              distanciaMetros: 15,
+              detalles: 'Validación local de respaldo.',
+            },
+            dictamenFinal: {
+              estado: 'Requiere Revisión Manual',
+              resumen: 'Active la API local (/api) para dictamen IA servidor o revise manualmente.',
+            },
+          };
+          setResult(mockData);
+        }
       } catch (err) {
         setError('Error al obtener el dictamen de validación.');
       } finally {
@@ -90,7 +98,7 @@ export const SocioEconomicValidationView: React.FC<Props> = ({
     };
 
     fetchValidation();
-  }, [caseId, data]);
+  }, [caseId, data, investigationData, organizationId]);
 
   const handleAuthorize = async () => {
     if (!onAuthorize) return;

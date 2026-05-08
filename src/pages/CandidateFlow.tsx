@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db, storage, auth, handleFirestoreError, OperationType } from '../firebase';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, getDoc } from '@/lib/localFirestore';
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { CheckCircle2, MapPin, Camera, Upload, ShieldCheck, AlertCircle, Home, DollarSign, Navigation, RefreshCw, FileText, Brain, Shield, Lock, Users, Video } from 'lucide-react';
@@ -9,6 +9,10 @@ import { useJsApiLoader, Autocomplete, GoogleMap, Marker } from '@react-google-m
 import { JuxaVerifyLoader } from '../components/JuxaVerifyLoader';
 import { toast } from 'react-hot-toast';
 import { compressImage, trimVideo } from '../lib/imageUtils';
+import { postJson } from '../services/platformApi';
+import type { AntiUsurpationResult, InitialRubricAnalysis } from '../types/saas';
+import { loadMergedCreditAiRules } from '../lib/creditAiRules';
+import { MEXICO_ENTITY_STATES } from '../lib/mexicoEntityStates';
 
 const libraries: ("places")[] = ["places"];
 
@@ -27,9 +31,16 @@ export const CandidateFlow: React.FC = () => {
   const [phase, setPhase] = useState(searchParams.get('phase') || '1');
   
   const isHR = linkData?.clientProfile === 'HR' || linkData?.investigationType === 'HR';
-  const isCredit = linkData?.clientProfile === 'CREDIT' || linkData?.investigationType === 'CREDIT';
-  const isLoongMotor = linkData?.clientProfile === 'LOONG_MOTOR' || linkData?.investigationType === 'LOONG_MOTOR';
-  const isLoongPreQual = isLoongMotor && linkData?.isPreQual;
+  const isLegacyLoong =
+    linkData?.clientProfile === 'LOONG_MOTOR' || linkData?.investigationType === 'LOONG_MOTOR';
+  const isCredit =
+    linkData?.clientProfile === 'CREDIT' ||
+    linkData?.investigationType === 'CREDIT' ||
+    isLegacyLoong;
+  /** Precalificación con formulario de arraigo reforzado (legacy LOONG o crédito SIMPLE) */
+  const showArraigoPreQualForm =
+    !!(linkData?.isPreQual && (isLegacyLoong || linkData?.investigationScope === 'SIMPLE'));
+  const isLoongPreQual = showArraigoPreQualForm;
 
   const [step, setStep] = useState(1);
   const [totalSteps, setTotalSteps] = useState(2);
@@ -39,6 +50,7 @@ export const CandidateFlow: React.FC = () => {
   const [mapCenter, setMapCenter] = useState({ lat: 19.4326, lng: -99.1332 });
   const [targetLocation, setTargetLocation] = useState<{lat: number, lng: number} | null>(null);
   const [targetAddress, setTargetAddress] = useState('');
+  const [entityState, setEntityState] = useState('');
   const [realTimeLocation, setRealTimeLocation] = useState<{lat: number, lng: number} | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [isWithinRange, setIsWithinRange] = useState<boolean | null>(null);
@@ -216,8 +228,12 @@ export const CandidateFlow: React.FC = () => {
         setLinkData({ id: linkSnap.id, ...data });
 
         const currentIsHR = data.clientProfile === 'HR' || data.investigationType === 'HR';
-        const currentIsCredit = data.clientProfile === 'CREDIT' || data.investigationType === 'CREDIT';
-        const currentIsLoongMotor = data.clientProfile === 'LOONG_MOTOR' || data.investigationType === 'LOONG_MOTOR';
+        const isLegacyLoongFetch =
+          data.clientProfile === 'LOONG_MOTOR' || data.investigationType === 'LOONG_MOTOR';
+        const currentIsCredit =
+          data.clientProfile === 'CREDIT' ||
+          data.investigationType === 'CREDIT' ||
+          isLegacyLoongFetch;
 
         // Fetch investigation data
         console.log(`[CandidateFlow] Fetching investigation data for: ${data.investigationId}`);
@@ -225,12 +241,17 @@ export const CandidateFlow: React.FC = () => {
         const invSnap = await getDoc(invRef);
         if (invSnap.exists()) {
           console.log("[CandidateFlow] Investigation data fetched:", invSnap.data());
-          setInvestigationData({ id: invSnap.id, ...invSnap.data() });
+          const inv = invSnap.data() as Record<string, unknown>;
+          setInvestigationData({ id: invSnap.id, ...inv });
+          const es = typeof inv.entityState === 'string' ? inv.entityState : '';
+          if (es) setEntityState(es);
         } else {
           console.warn("[CandidateFlow] Investigation document not found:", data.investigationId);
         }
 
-        console.log(`[CandidateFlow] Client Profile: ${data.clientProfile}, isHR: ${currentIsHR}, isCredit: ${currentIsCredit}, isLoongMotor: ${currentIsLoongMotor}`);
+        console.log(
+          `[CandidateFlow] Client Profile: ${data.clientProfile}, isHR: ${currentIsHR}, isCredit: ${currentIsCredit}, legacyLoong: ${isLegacyLoongFetch}`
+        );
         
         // Determine total steps and phase
         const currentPhase = searchParams.get('phase') || '1';
@@ -241,12 +262,11 @@ export const CandidateFlow: React.FC = () => {
             setTotalSteps(2); // Step 1: Questions, Step 2: Location & ID
           } else if (data.investigationScope === 'INTEGRAL' && currentPhase === '2') {
             setTotalSteps(2);
+          } else if (isLegacyLoongFetch && data.isPreQual) {
+            setTotalSteps(2);
           } else {
             setTotalSteps(3);
           }
-        } else if (currentIsLoongMotor) {
-          // Loong Motor is 2 steps (Step 1: Location, Step 2: Arraigo Form)
-          setTotalSteps(2);
         } else if (currentIsHR) {
           // HR is 2 steps (Location + Documents)
           setTotalSteps(2);
@@ -277,14 +297,47 @@ export const CandidateFlow: React.FC = () => {
               status: 'OPENED',
               updatedAt: new Date().toISOString()
             });
-            // Also update the investigation document
+            // Also update the investigation document; mantener pipeline en PRE_QUALIFICATION si aún no se ha asignado.
             await updateDoc(doc(db, 'investigations', data.investigationId), {
               linkStatus: 'OPENED',
-              updatedAt: new Date().toISOString()
+              creditPipelineStage:
+                (invSnap.exists() && (invSnap.data() as any)?.creditPipelineStage) || 'PRE_QUALIFICATION',
+              updatedAt: new Date().toISOString(),
             });
           } catch (updateErr) {
             handleFirestoreError(updateErr, OperationType.UPDATE, `candidate_links/${linkSnap.id}`);
           }
+        }
+
+        // Preanálisis anti-usurpación temprano para vertical Ford (si no existe aún).
+        try {
+          const invDataNow = invSnap.exists() ? (invSnap.data() as any) : {};
+          const isCreditVertical =
+            data.clientProfile === 'CREDIT' ||
+            data.investigationType === 'CREDIT' ||
+            invDataNow?.clientProfile === 'CREDIT' ||
+            data.vertical === 'FORD_CREDIT_MX' ||
+            invDataNow?.vertical === 'FORD_CREDIT_MX';
+          const alreadyDone = Boolean(invDataNow?.identityPreAnalysis);
+          if (isCreditVertical && !alreadyDone && data.investigationId) {
+            const summary = `Solicitud crédito. Título: ${invDataNow?.title || data.title || ''}. Monto: ${invDataNow?.montoCreditoCapital || data.loongMontoTotal || 'N/D'}. Estado: ${invDataNow?.status || 'PENDING'}. Dirección declarada: ${invDataNow?.targetAddress || data.targetAddress || 'N/D'}. Vertical: ${invDataNow?.vertical || data.vertical || 'N/D'}.`;
+            const resp = await postJson<{ result: AntiUsurpationResult }>(
+              '/api/identity/anti-usurpation',
+              {
+                summary: summary.slice(0, 2000),
+                organizationId: invDataNow?.organizationId || data.organizationId || 'default',
+              }
+            );
+            if (resp?.result) {
+              await updateDoc(doc(db, 'investigations', data.investigationId), {
+                identityPreAnalysis: resp.result,
+                updatedAt: new Date().toISOString(),
+              });
+            }
+          }
+        } catch (paErr) {
+          // No bloquear el flujo del candidato si el servicio aún no está montado en este entorno.
+          console.warn('[CandidateFlow] Preanálisis identidad no disponible:', paErr);
         }
       } catch (err) {
         handleFirestoreError(err, OperationType.GET, `candidate_links/${linkId}`);
@@ -345,11 +398,9 @@ export const CandidateFlow: React.FC = () => {
     // A partir de aquí es la validación del ÚLTIMO PASO
     if (!isHR && !isCredit && phase === '1') {
       // Validate Socioeconomic / Pre-calificación
-      const isLoongPreQual = linkData?.clientProfile === 'LOONG_MOTOR' && linkData?.isPreQual;
-      
       if (isLoongPreQual) {
         if (!preQualQuestions.tiempoResidenciaAnios || !preQualQuestions.referenciaVecinalNombre || !preQualQuestions.referencia1Nombre) {
-          alert("Para Loong Motor, la validación de Arraigo es prioritaria. Por favor completa el tiempo en domicilio y todas las referencias.");
+          alert('La validación de arraigo es prioritaria. Completa el tiempo en domicilio y todas las referencias.');
           return;
         }
         const missingPhotos = [];
@@ -460,6 +511,7 @@ export const CandidateFlow: React.FC = () => {
           linkStatus: 'COMPLETED',
           candidateData: JSON.stringify(candidateSubmittedData),
           uploadedFileUrls: evidenceUrls,
+          ...(entityState.trim() ? { entityState: entityState.trim().toUpperCase() } : {}),
           updatedAt: new Date().toISOString()
         });
       } catch (err) {
@@ -475,7 +527,7 @@ export const CandidateFlow: React.FC = () => {
           try {
             const { analyzeCandidateData } = await import('../lib/gemini');
             const candidateDataForAI = {
-              perfil: 'LOONG_MOTOR',
+              perfil: 'CREDIT',
               isPreQual: true,
               preQualQuestions,
               direccionDeclarada,
@@ -540,7 +592,7 @@ export const CandidateFlow: React.FC = () => {
       return;
     }
 
-    if (isCredit || isLoongMotor) {
+    if (isCredit) {
       if (!ingresoMensual || !gastosMensuales || !ocupacion || !direccionDeclarada || !antiguedadVivienda || (isCredit && !comprobanteIngresos)) {
         alert("Por favor, completa todos los campos de tu perfil socioeconómico antes de enviar.");
         return;
@@ -574,7 +626,7 @@ export const CandidateFlow: React.FC = () => {
 
     try {
       let phase1Data: any = {};
-      if (!isHR && !isCredit && !isLoongMotor) {
+      if (!isHR && !isCredit) {
         try {
           if (linkData.candidateData) {
             phase1Data = JSON.parse(linkData.candidateData);
@@ -585,7 +637,7 @@ export const CandidateFlow: React.FC = () => {
           mapLocation: mapPosition ? `${mapPosition.lat.toFixed(6)}, ${mapPosition.lng.toFixed(6)}` : 'No proporcionada',
           realTimeLocation: realTimeLocation ? `${realTimeLocation.lat.toFixed(6)}, ${realTimeLocation.lng.toFixed(6)}` : 'No proporcionada',
           direccionDeclarada: direccionDeclarada || 'No especificada',
-          ...(isCredit || isLoongMotor ? {
+          ...(isCredit ? {
             ingresoMensual,
             gastosMensuales,
             ocupacion,
@@ -737,25 +789,108 @@ export const CandidateFlow: React.FC = () => {
       setSuccess(true);
       setIsSubmitting(false);
 
-      // Run AI in background
+      // Run AI in background: rubro inicial (todas las solicitudes crédito) + dictamen integral si aplica
       (async () => {
         try {
+          const merged = await loadMergedCreditAiRules(
+            db,
+            investigationData?.organizationId || linkData?.organizationId,
+            investigationData?.clientId
+          );
+          const investigationScope =
+            linkData?.investigationScope ?? investigationData?.investigationScope ?? 'INTERMEDIATE';
+
+          const casePayload = {
+            investigationScope,
+            vertical: investigationData?.vertical || linkData?.vertical,
+            title: investigationData?.title || linkData?.title,
+            phase1Data,
+            uploadedEvidenceKeys: Object.keys(currentUrls),
+            evidenceUrls: currentUrls,
+            distanceMeters: Math.round(distance),
+            credit: {
+              montoCreditoCapital: investigationData?.montoCreditoCapital,
+              montoCreditoIntereses: investigationData?.montoCreditoIntereses,
+              plazoFinanciamiento: investigationData?.plazoFinanciamiento,
+              tipoCredito: investigationData?.tipoCredito,
+              loongMontoTotal: linkData?.loongMontoTotal || investigationData?.loongMontoTotal,
+              loongEnganche: linkData?.loongEnganche || investigationData?.loongEnganche,
+            },
+          };
+
+          let initialRubric: InitialRubricAnalysis | null = null;
+          try {
+            const irResp = await postJson<{ result: InitialRubricAnalysis }>('/api/credit/initial-rubric', {
+              organizationId: investigationData?.organizationId || linkData?.organizationId || 'default',
+              mergedRules: merged.mergedTextForInitialRubric,
+              rulesFingerprint: merged.fingerprint,
+              casePayload,
+            });
+            initialRubric = irResp?.result ?? null;
+            if (initialRubric) {
+              await updateDoc(doc(db, 'investigations', linkData.investigationId), {
+                initialRubricAnalysis: initialRubric,
+                identityPreAnalysis: initialRubric.identityUsurpation,
+                updatedAt: new Date().toISOString(),
+              });
+            }
+          } catch (irErr) {
+            console.warn('[CandidateFlow] Rubro inicial no disponible:', irErr);
+          }
+
+          const gateScore = (g: string) =>
+            g === 'PASS' ? 72 : g === 'BLOCK' ? 22 : 48;
+
+          if (investigationScope === 'BASIC') {
+            const gate = initialRubric?.rubricGate || 'REVIEW';
+            const socJson = {
+              dictamenFinal: {
+                estado:
+                  gate === 'BLOCK'
+                    ? 'NO VIABLE'
+                    : gate === 'PASS'
+                      ? 'VIABLE'
+                      : 'SUJETO A CONSIDERACIÓN',
+                resumen:
+                  initialRubric?.validationSummary ||
+                  'Rubro inicial procesado. El dictamen socioeconómico integral quedará sujeto a mesa de control.',
+              },
+              score: gateScore(gate),
+              rubricInitialOnly: true,
+              initialRubricGate: gate,
+            };
+            try {
+              await updateDoc(doc(db, 'investigations', linkData.investigationId), {
+                socioeconomicDictamen: JSON.stringify(socJson),
+                result: gate === 'PASS' ? 'VIABLE' : gate === 'BLOCK' ? 'NOT_VIABLE' : 'REVIEW',
+                status: 'COMPLETED',
+                score: gateScore(gate),
+                creditPipelineStage: 'MESA_CONTROL',
+                updatedAt: new Date().toISOString(),
+              });
+            } catch (err) {
+              handleFirestoreError(err, OperationType.UPDATE, `investigations/${linkData.investigationId}`);
+            }
+            return;
+          }
+
           const { analyzeCandidateData } = await import('../lib/gemini');
-          
-          let businessRules = '';
+
           let scoringConfig = null;
           try {
             if (investigationData?.clientId) {
               const clientDoc = await getDoc(doc(db, 'clients', investigationData.clientId));
               if (clientDoc.exists()) {
                 const clientData = clientDoc.data();
-                businessRules = clientData.politicasGenerales || '';
                 scoringConfig = clientData.scoringConfig || null;
               }
             }
           } catch (err) {
             handleFirestoreError(err, OperationType.GET, `clients/${investigationData?.clientId}`);
           }
+
+          const businessRules =
+            merged.mergedTextForFullAnalysis?.trim() || merged.mergedPoliticasGenerales;
 
           const imageParts = [
             currentUrls['fotoFachadaUrl'],
@@ -791,6 +926,7 @@ export const CandidateFlow: React.FC = () => {
           const aiParsed = JSON.parse(aiResult);
           const dictamen = {
             ...aiParsed,
+            initialRubricAnalysis: initialRubric || undefined,
             congruenciaDomicilio: {
               ...(aiParsed.congruenciaDomicilio || {}),
               distanciaMetros: Math.round(distance),
@@ -805,6 +941,7 @@ export const CandidateFlow: React.FC = () => {
               status: 'COMPLETED',
               score: dictamen?.score || 0,
               scoreBreakdown: dictamen?.scoreBreakdown ? JSON.stringify(dictamen.scoreBreakdown) : null,
+              creditPipelineStage: 'MESA_CONTROL',
               updatedAt: new Date().toISOString()
             });
           } catch (err) {
@@ -862,8 +999,7 @@ export const CandidateFlow: React.FC = () => {
             const d = R * c;
             
             setDistanceToTarget(d);
-            // 30 meter rule for Loong Motor, 50m for others
-            const threshold = isLoongMotor ? 30 : 50;
+            const threshold = isLegacyLoong ? 30 : 50;
             const withinRange = d <= threshold || linkData?.isTestMode;
             setIsWithinRange(withinRange);
             
@@ -1307,11 +1443,11 @@ export const CandidateFlow: React.FC = () => {
           </h2>
           
           <p className="text-lg text-slate-600 mb-8 leading-relaxed">
-            Hemos recibido tus documentos y ubicación correctamente. Tu proceso de validación ha comenzado y serás notificado por el equipo de Loong Motor una vez que el análisis sea completado.
+            Hemos recibido tus documentos y ubicación correctamente. Tu proceso de validación ha comenzado; el equipo de Juxa Verify te notificará cuando el análisis esté listo.
           </p>
 
           <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 text-blue-700 text-sm font-medium mb-6">
-            Gracias por confiar en Loong Motor.
+            Gracias por usar Juxa Verify.
           </div>
 
           <button
@@ -1355,14 +1491,11 @@ export const CandidateFlow: React.FC = () => {
       {/* Header Fijo y Corporativo */}
       <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm px-4 sm:px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className={`w-10 h-10 ${isLoongMotor ? 'bg-red-600' : 'bg-blue-600'} text-white flex items-center justify-center rounded-xl font-bold shadow-lg shadow-blue-200`}>
-            {isLoongMotor ? 'LM' : 'JV'}
+          <div className="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-xl font-bold shadow-lg shadow-blue-200">
+            JV
           </div>
           <span className="font-bold text-xl tracking-tight text-slate-900">
-            {isLoongMotor ? 'LOONG ' : 'JUXA '}
-            <span className={isLoongMotor ? 'text-red-600' : 'text-blue-600'}>
-              {isLoongMotor ? 'MOTOR' : 'VERIFY'}
-            </span>
+            JUXA <span className="text-blue-600">VERIFY</span>
           </span>
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-full">
@@ -1374,41 +1507,50 @@ export const CandidateFlow: React.FC = () => {
       </header>
 
       {/* Hero Section (Bienvenida) */}
-      <section className={`bg-gradient-to-b ${isLoongMotor ? 'from-red-50' : 'from-blue-50'} to-white py-12 px-4 text-center`}>
+      <section className="bg-gradient-to-b from-blue-50 to-white py-12 px-4 text-center">
         <div className="max-w-2xl mx-auto">
           <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-4 tracking-tight">
-            {(isLoongMotor && !investigationData?.isTest && !investigationData?.isPreQual) ? 'Solicitud de Crédito de Motocicletas' : 'Proceso de Verificación Segura'}
+            {isCredit && !investigationData?.isTest && !investigationData?.isPreQual
+              ? 'Solicitud de crédito verificada'
+              : 'Proceso de Verificación Segura'}
           </h1>
           <p className="text-lg text-slate-600 leading-relaxed mb-8">
-            {(isLoongMotor && !investigationData?.isTest && !investigationData?.isPreQual)
-              ? 'Bienvenido a Loong Motor. Por favor, completa tu solicitud para que nuestro motor de IA analice tu perfil y te ofrezca la mejor opción de financiamiento.' 
-              : 'Por favor, completa los siguientes pasos. Este proceso es rápido, seguro y cumple con las normativas de privacidad más estrictas.'}
+            {isCredit && !investigationData?.isTest && !investigationData?.isPreQual
+              ? 'Completa tu solicitud; nuestro motor de IA analizará tu perfil con las reglas configuradas para tu institución.'
+              : 'Completa los siguientes pasos. Este proceso es rápido, seguro y cumple con las normativas de privacidad más estrictas.'}
           </p>
 
-          {((isCredit || isLoongMotor) && investigationData && (investigationData.loongMontoTotal || investigationData.loongEnganche) && !investigationData.isTest && !investigationData.isPreQual) && (
-            <div className={`bg-white p-6 rounded-2xl shadow-sm border ${isLoongMotor ? 'border-red-100' : 'border-emerald-100'} text-left max-w-lg mx-auto animate-in fade-in slide-in-from-top-4 duration-500`}>
+          {isCredit &&
+            investigationData &&
+            !investigationData.isTest &&
+            !investigationData.isPreQual &&
+            (investigationData.loongMontoTotal ||
+              investigationData.loongEnganche ||
+              investigationData.montoCreditoCapital ||
+              investigationData.montoCreditoIntereses) && (
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-100 text-left max-w-lg mx-auto animate-in fade-in slide-in-from-top-4 duration-500">
               <div className="flex items-center gap-3 mb-4">
-                <div className={`p-2 ${isLoongMotor ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'} rounded-lg`}>
+                <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
                   <DollarSign className="w-5 h-5" />
                 </div>
-                <h3 className="font-bold text-slate-900">
-                  {isLoongMotor ? 'Resumen de Financiamiento Loong Motor' : 'Resumen de Solicitud de Crédito'}
-                </h3>
+                <h3 className="font-bold text-slate-900">Resumen de financiamiento</h3>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                {isLoongMotor ? (
+                {investigationData.loongMontoTotal || linkData?.loongMontoTotal ? (
                   <>
                     <div className="col-span-2">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Monto Total a Financiar (C+I)</p>
-                      <p className="text-xl font-bold text-red-600">${linkData?.loongMontoTotal || investigationData?.loongMontoTotal || '0.00'}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Monto total referenciado</p>
+                      <p className="text-xl font-bold text-emerald-700">
+                        ${linkData?.loongMontoTotal || investigationData?.loongMontoTotal || '0.00'}
+                      </p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Enganche Aportado</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Enganche</p>
                       <p className="text-sm font-bold text-slate-700">{linkData?.loongEnganche || investigationData?.loongEnganche || '0'}%</p>
                     </div>
                     <div>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Estatus</p>
-                      <p className="text-sm font-bold text-emerald-600">Validando Arraigo</p>
+                      <p className="text-sm font-bold text-emerald-600">En verificación</p>
                     </div>
                   </>
                 ) : (
@@ -1482,8 +1624,8 @@ export const CandidateFlow: React.FC = () => {
             
             {/* Location Section */}
             {phase === '1' && (
-              (step === 1 && (linkData?.investigationScope !== 'BASIC' || isLoongMotor)) ||
-              (step === 2 && linkData?.investigationScope === 'BASIC' && !isLoongMotor)
+              (step === 1 && (linkData?.investigationScope !== 'BASIC' || isLegacyLoong)) ||
+              (step === 2 && linkData?.investigationScope === 'BASIC' && !isLegacyLoong)
             ) && (
             <div className="space-y-4">
               <h3 className="text-lg font-bold text-slate-900 flex items-center">
@@ -1516,6 +1658,26 @@ export const CandidateFlow: React.FC = () => {
                       </Autocomplete>
                     )}
                   </div>
+
+                  {isCredit && (
+                    <div className="max-w-md">
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Entidad federativa del domicilio <span className="text-slate-400 font-normal">(opcional)</span>
+                      </label>
+                      <select
+                        value={entityState}
+                        onChange={(e) => setEntityState(e.target.value)}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                      >
+                        <option value="">— Seleccionar —</option>
+                        {MEXICO_ENTITY_STATES.map((s) => (
+                          <option key={s.code} value={s.code}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div className="h-80 w-full rounded-xl overflow-hidden border border-slate-300 z-0 relative">
                     {isLoaded ? (
@@ -1616,7 +1778,7 @@ export const CandidateFlow: React.FC = () => {
             )}
 
             {/* Pre-qualification Section (Credit BASIC Step 1) */}
-            {phase === '1' && step === 1 && linkData?.investigationScope === 'BASIC' && !isLoongMotor && (
+            {phase === '1' && step === 1 && linkData?.investigationScope === 'BASIC' && !isLegacyLoong && (
             <div className="space-y-6">
               <h3 className="text-lg font-bold text-slate-900 flex items-center">
                 <FileText className="w-5 h-5 mr-2 text-blue-600" />
@@ -1781,18 +1943,26 @@ export const CandidateFlow: React.FC = () => {
             {/* Socioeconomic Section */}
             {phase === '1' && (
               (step === 2 && linkData?.clientProfile !== 'HR' && linkData?.investigationScope !== 'BASIC') ||
-              (step === 2 && isLoongMotor && linkData?.isPreQual)
+              (step === 2 && showArraigoPreQualForm)
             ) && (
             <div className="space-y-4">
               <h3 className="text-lg font-bold text-slate-900 flex items-center">
                 <Home className="w-5 h-5 mr-2 text-blue-600" />
-                {isLoongMotor ? 'Estudio de Arraigo y Campo' : (linkData?.isPreQual ? 'Precalificación de Capacidad de Pago' : 'Estudio Socioeconómico')}
+                {showArraigoPreQualForm
+                  ? 'Estudio de arraigo y campo'
+                  : linkData?.isPreQual
+                    ? 'Precalificación de capacidad de pago'
+                    : 'Estudio socioeconómico'}
               </h3>
               <p className="text-sm text-slate-500">
-                {isLoongMotor ? 'Completa la información de arraigo y sube las fotos de tu domicilio para el dictamen.' : (linkData?.isPreQual ? 'Ayúdanos a entender tu perfil financiero para tu nueva moto.' : 'Por favor, proporciona la siguiente información sobre tu domicilio e ingresos.')}
+                {showArraigoPreQualForm
+                  ? 'Completa la información de arraigo y sube las fotos de tu domicilio para el dictamen.'
+                  : linkData?.isPreQual
+                    ? 'Ayúdanos a entender tu perfil financiero para continuar con tu solicitud.'
+                    : 'Por favor, proporciona la siguiente información sobre tu domicilio e ingresos.'}
               </p>
               
-              {linkData?.clientProfile === 'LOONG_MOTOR' && linkData?.isPreQual ? (
+              {showArraigoPreQualForm ? (
                 renderLoongPreQualForm()
               ) : (
                 <div className="space-y-4">
@@ -1965,7 +2135,7 @@ export const CandidateFlow: React.FC = () => {
             {/* Documents Section */}
             {((phase === '1' && step === 3 && linkData?.clientProfile === 'CREDIT') || 
               (linkData?.clientProfile === 'HR' && step === 2) || 
-              (phase === '1' && step === 2 && linkData?.investigationScope === 'BASIC' && !isLoongMotor) ||
+              (phase === '1' && step === 2 && linkData?.investigationScope === 'BASIC' && !isLegacyLoong) ||
               (phase === '2' && step === 1)) && (
             <div className="space-y-4">
               <h3 className="text-lg font-bold text-slate-900 flex items-center">
@@ -2240,7 +2410,7 @@ export const CandidateFlow: React.FC = () => {
                       onClick={handleNextStep}
                       className="px-8 py-3.5 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-200 transition-all active:scale-95"
                     >
-                      {isLoongMotor && step === 1 ? 'Validar Ubicación y Continuar' : 'Siguiente'}
+                      {isLegacyLoong && step === 1 ? 'Validar ubicación y continuar' : 'Siguiente'}
                     </button>
                   ) : (
                     <button

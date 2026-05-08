@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Users, Building2, CheckCircle2, Clock, AlertCircle, Plus, Search, Filter, ShieldCheck, Settings, Bot } from 'lucide-react';
 import { db, auth } from '../../firebase';
-import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, doc, updateDoc } from '@/lib/localFirestore';
 import { useAuthStatus } from '../../contexts/AuthContext';
+import { useTenant } from '../../contexts/TenantContext';
 import { DashboardLayout } from './DashboardLayout';
 import { IAConfigPanel } from './IAConfigPanel';
+import { CreditApplicationsModule } from './CreditApplicationsModule';
+import { getCreditCrmCapabilities } from '../../lib/creditCrmCapabilities';
 
 export const FinancialDashboard: React.FC = () => {
-  const { role, user } = useAuthStatus();
+  const { role, user, organizationId, clientAccountRole } = useAuthStatus();
+  const { organization } = useTenant();
+  const partnerVertical = organization?.partnerVertical && organization.partnerVertical !== 'NONE'
+    ? organization.partnerVertical
+    : null;
+  const isFordVertical = partnerVertical === 'FORD_CREDIT_MX';
+  const isProgramRoot = Boolean(organization?.fordProgramRoot);
   const [investigations, setInvestigations] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('requests');
 
@@ -19,10 +28,27 @@ export const FinancialDashboard: React.FC = () => {
 
     let q;
     if (isInternal) {
-      q = query(
-        collection(db, 'investigations'),
-        orderBy('createdAt', 'desc')
-      );
+      if (isFordVertical) {
+        // Mesa de programa Ford ve todas las agencias bajo la vertical;
+        // mesa de agencia (no root) ve solo expedientes de su organización.
+        q = isProgramRoot
+          ? query(
+              collection(db, 'investigations'),
+              where('vertical', '==', 'FORD_CREDIT_MX'),
+              orderBy('createdAt', 'desc')
+            )
+          : query(
+              collection(db, 'investigations'),
+              where('vertical', '==', 'FORD_CREDIT_MX'),
+              where('organizationId', '==', organizationId || 'default'),
+              orderBy('createdAt', 'desc')
+            );
+      } else {
+        q = query(
+          collection(db, 'investigations'),
+          orderBy('createdAt', 'desc')
+        );
+      }
     } else {
       q = query(
         collection(db, 'investigations'),
@@ -36,34 +62,49 @@ export const FinancialDashboard: React.FC = () => {
         id: doc.id,
         ...doc.data()
       }));
-      setInvestigations(invs);
+      // Si la mesa NO es Ford, filtrar en memoria los expedientes que ya nacieron con vertical (evita mezclar líneas)
+      const filtered = !isFordVertical
+        ? invs.filter((i: any) => !i.vertical || i.vertical === 'NONE')
+        : invs;
+      setInvestigations(filtered);
     });
 
     return () => {
       unsubscribeInv();
     };
-  }, []);
+  }, [role, organizationId, isFordVertical, isProgramRoot]);
 
   const completedCount = investigations.filter(i => i.status === 'COMPLETED').length;
   const inProgressCount = investigations.filter(i => i.status === 'IN_PROGRESS' || i.status === 'PENDING').length;
   const attentionCount = investigations.filter(i => i.status === 'REQUIRES_ATTENTION').length;
 
+  const fordPrefix = isFordVertical ? 'Ford Crédito MX · ' : '';
+
   const getTitle = () => {
-    if (role === 'EJECUTIVO_VENTAS') return 'Panel Comercial';
-    if (role === 'ANALISTA_MESA_CONTROL') return 'Mesa de Control Financiero';
-    if (role === 'GERENTE_DIRECTIVO') return 'Panel Directivo Financiero';
-    return 'Crédito Financiero';
+    if (role === 'EJECUTIVO_VENTAS') return `${fordPrefix}Panel Comercial`;
+    if (role === 'ANALISTA_MESA_CONTROL') return `${fordPrefix}Mesa de Control`;
+    if (role === 'GERENTE_DIRECTIVO') return `${fordPrefix}Panel Directivo`;
+    return `${fordPrefix}Crédito Financiero`;
   };
 
   const getSubtitle = () => {
-    if (role === 'EJECUTIVO_VENTAS') return 'Gestión de solicitudes de crédito e investigación.';
-    if (role === 'ANALISTA_MESA_CONTROL') return 'Monitoreo de avance técnico y asignación de recursos.';
-    if (role === 'GERENTE_DIRECTIVO') return 'Aprobación de dictámenes y gestión de planes.';
-    return 'Verificación de flujos y análisis de crédito.';
+    const fordCtx = isFordVertical
+      ? isProgramRoot
+        ? 'Vista programa: todas las agencias.'
+        : 'Vista agencia: expedientes originados en esta concesionaria.'
+      : '';
+    const base = (() => {
+      if (role === 'EJECUTIVO_VENTAS') return 'Gestión de solicitudes de crédito e investigación.';
+      if (role === 'ANALISTA_MESA_CONTROL') return 'Monitoreo de avance técnico y asignación de recursos.';
+      if (role === 'GERENTE_DIRECTIVO') return 'Aprobación de dictámenes y gestión de planes.';
+      return 'Verificación de flujos y análisis de crédito.';
+    })();
+    return fordCtx ? `${fordCtx} ${base}` : base;
   };
 
   const sidebarItems = [
     { id: 'requests', label: role === 'GERENTE_DIRECTIVO' ? 'Dictámenes' : 'Solicitudes', icon: FileText },
+    ...(isFordVertical ? [{ id: 'ford-pipeline', label: 'Pipeline Ford', icon: Building2 }] : []),
     { id: 'flows', label: 'Verificación de Flujos', icon: ShieldCheck },
     { id: 'validation', label: 'Validar Créditos', icon: CheckCircle2 },
     { id: 'rules', label: 'Reglas de Crédito', icon: Settings },
@@ -86,6 +127,7 @@ export const FinancialDashboard: React.FC = () => {
           </button>
         ) : undefined
       }
+      showFinancialComplianceAside
     >
       {activeTab === 'requests' && (
         <>
@@ -185,6 +227,28 @@ export const FinancialDashboard: React.FC = () => {
                           Asignar Recurso
                         </button>
                       )}
+                      {role === 'ANALISTA_MESA_CONTROL' && (inv.status === 'PENDING' || inv.status === 'IN_PROGRESS') && (
+                        <button
+                          onClick={async () => {
+                            const reason = window.prompt('¿Qué información hace falta o no está clara? (visible para la agencia)');
+                            if (!reason) return;
+                            try {
+                              await updateDoc(doc(db, 'investigations', inv.id), {
+                                status: 'REQUIRES_ATTENTION',
+                                creditPipelineStage: 'RETURN_TO_AGENCY',
+                                mesaReturnReason: reason,
+                                updatedAt: new Date().toISOString(),
+                              });
+                            } catch (e) {
+                              console.error('No se pudo regresar el expediente', e);
+                            }
+                          }}
+                          className="flex-1 sm:flex-none flex items-center justify-center px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors shadow-sm"
+                          title="Regresar a la agencia por información incompleta o poco clara"
+                        >
+                          Regresar a Agencia
+                        </button>
+                      )}
                       {role === 'GERENTE_DIRECTIVO' && inv.status === 'COMPLETED' && (
                         <button className="flex-1 sm:flex-none flex items-center justify-center px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors shadow-sm">
                           Aprobar Dictamen
@@ -235,6 +299,29 @@ export const FinancialDashboard: React.FC = () => {
               Iniciar Validación Manual
             </button>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'ford-pipeline' && isFordVertical && (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+            <p className="font-bold mb-1">Línea Ford Crédito México</p>
+            <p>
+              {isProgramRoot
+                ? 'Programa central: ves todas las agencias de la red Ford.'
+                : 'Mesa de agencia: solo tus expedientes. Usa “Regresar a Agencia” cuando falte información.'}
+            </p>
+          </div>
+          <CreditApplicationsModule
+            investigations={investigations}
+            profiles={['CREDIT', 'FORD_CREDIT_MX']}
+            vertical="FORD_CREDIT_MX"
+            capabilities={getCreditCrmCapabilities({
+              context: 'financial',
+              role,
+              clientAccountRole,
+            })}
+          />
         </div>
       )}
 

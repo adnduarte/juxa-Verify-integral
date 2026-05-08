@@ -249,29 +249,14 @@ export async function analyzeCandidateData(
     }
 
     const { perfil, puesto, loongMontoTotal, loongEnganche } = parsedData;
-    let promptContext = "";
+    const legacyRetailCredit =
+      perfil === 'LOONG_MOTOR' || !!(loongMontoTotal || loongEnganche);
+    let promptContext = '';
 
-    if (perfil === 'LOONG_MOTOR') {
-      promptContext = `
-        OBJETIVO: Investigación de Crédito de Motocicletas - LOONG MOTOR.
-        ENFOQUE PRIORITARIO: ARRAIGO Y CAMPO (Excluir análisis de ingresos y enganche).
-        
-        REGLAS DE NEGOCIO LOONG MOTOR:
-        1. "ARRAIGO ES REY": La estabilidad residencial es el factor determinante. Valida el tiempo en el domicilio y la veracidad de las referencias vecinales.
-        2. "OMITIR INGRESOS": En esta etapa, los ingresos y el monto del enganche NO son sujetos a revisión para el dictamen. Ignora si están en $0.
-        3. "BUSCAR EL CÓMO SÍ": Tu misión es encontrar la estructura necesaria para aprobar el crédito basándote en la veracidad del domicilio.
-        
-        CRITERIOS DE DICTAMEN DE ARRAIGO REFORZADO:
-        - ANÁLISIS DE VIDEO (CRÍTICO): Analiza el video de entrada (45s). Debe mostrar una transición fluida y real desde la calle (vía pública) hacia el interior del inmueble. Esto valida que el solicitante tiene acceso legítimo (llaves). Si el video no muestra esta transición o parece editado, penaliza el arraigo.
-        - COTEJO FACHADA VS GOOGLE MAPS: Compara la foto de fachada y el video con el contexto geográfico esperado para la dirección declarada. Busca elementos de coincidencia (tipo de banqueta, postes, árboles, estilo arquitectónico de la zona).
-        - ANÁLISIS FORENSE DE IDENTIFICACIÓN: Revisa la identificación oficial. El domicilio en la ID puede variar, pero los datos biográficos deben ser consistentes con el solicitante.
-        - CONGRUENCIA DE INTERIORES: ¿Las fotos de Sala, Comedor, Cocina y Habitación pertenecen al mismo inmueble mostrado en el video y la fachada?
-      `;
-    } else {
-      switch (perfil) {
-        case 'Recursos Humanos':
-        case 'HR':
-          promptContext = `
+    switch (perfil) {
+      case 'Recursos Humanos':
+      case 'HR':
+        promptContext = `
             OBJETIVO: Validar identidad, arraigo y congruencia del entorno con el puesto de ${puesto || 'No especificado'}.
             NO evalúes ingresos ni capacidad de pago a menos que se proporcionen recibos de nómina.
             Enfócate en:
@@ -279,16 +264,29 @@ export async function analyzeCandidateData(
             - ¿El comprobante de domicilio coincide con la ubicación GPS y la foto de la fachada?
             - ¿El entorno visible es congruente con el nivel socioeconómico esperado para el puesto?
           `;
-          break;
-        case 'Crédito':
-        case 'CREDIT':
-          const isPreQual = candidateData.creditStage === 'PRE_QUALIFICATION' || candidateData.investigationScope === 'BASIC';
-          const isDirect = candidateData.isDirect;
-          const preQualQ = candidateData.preQualQuestions;
-          promptContext = `
-            OBJETIVO: Investigación de Crédito - ALCANCE: ${candidateData.investigationScope || 'No especificado'}.
+        break;
+      case 'Crédito':
+      case 'CREDIT':
+      case 'LOONG_MOTOR': {
+        const isPreQual =
+          candidateData.creditStage === 'PRE_QUALIFICATION' || candidateData.investigationScope === 'BASIC';
+        const isDirect = candidateData.isDirect;
+        const preQualQ = candidateData.preQualQuestions;
+        promptContext = `
+            OBJETIVO: Investigación de crédito (Juxa Verify) — ALCANCE: ${candidateData.investigationScope || 'No especificado'}.
             ETAPA: ${isPreQual ? 'PRE-CALIFICACIÓN (FASE 1)' : 'CALIFICACIÓN (FASE 2)'}.
             MODO: ${isDirect ? 'Investigación Directa' : 'Investigación con Candidato'}.
+            
+            ${
+              legacyRetailCredit
+                ? `
+            ÉNFASIS RETAIL / ARRAIGO DE CAMPO:
+            - Prioriza estabilidad residencial, evidencia de domicilio y trazabilidad de campo frente a ingresos declarados.
+            - Monto / enganche declarados (si existen): ${loongMontoTotal || 'N/A'} / ${loongEnganche || 'N/A'} — úsalos solo como contexto, no como criterio único de dictamen en precalificación simple.
+            - Analiza video de fachada, coherencia de interiores y coincidencia con ubicación objetivo.
+            `
+                : ''
+            }
             
             ${isPreQual ? `
             ENFOQUE PRE-CALIFICACIÓN:
@@ -319,10 +317,10 @@ export async function analyzeCandidateData(
             - ¿Los ingresos declarados (${candidateData.ingresoMensual || candidateData.ingreso || candidateData.direct_ingreso || 'No especificado'}) son realistas para el entorno observado?
             - ¿Hay señales de alerta sobre la estabilidad domiciliaria?
           `;
-          break;
-        default:
-          promptContext = "Realiza un análisis general de congruencia entre los datos declarados y la evidencia visual.";
+        break;
       }
+      default:
+        promptContext = 'Realiza un análisis general de congruencia entre los datos declarados y la evidencia visual.';
     }
 
     const basePrompt = `
@@ -347,9 +345,11 @@ export async function analyzeCandidateData(
       5. AUDITORÍA VISUAL: Compara la Foto de Fachada subida por el usuario contra la descripción del entorno. Busca indicios de "re-fotografía" (fotos de pantallas).
 
       CONFIGURACIÓN DE SCORING (APLICAR PARA CALCULAR EL PUNTAJE):
-      ${perfil === 'LOONG_MOTOR' 
-        ? "Para LOONG MOTOR: Arraigo Domiciliario: 70%, Verificación Identidad: 20%, Documentación: 10%. Ignorar Ingresos." 
-        : (scoringConfig ? JSON.stringify(scoringConfig, null, 2) : "Usa el sistema de scoring predeterminado (Ingresos: 30%, Ubicación: 40%, Documentación: 30%).")}
+      ${legacyRetailCredit
+        ? 'Para crédito retail con énfasis en arraigo: Arraigo domiciliario 70%, verificación de identidad 20%, documentación 10%; ingresos como contexto secundario.'
+        : scoringConfig
+          ? JSON.stringify(scoringConfig, null, 2)
+          : 'Usa el sistema de scoring predeterminado (Ingresos: 30%, Ubicación: 40%, Documentación: 30%).'}
 
       INSTRUCCIONES DE SCORING:
       1. Calcula un puntaje (score) de 0 a 100.
@@ -525,6 +525,105 @@ export const chatWithJuxaVerify = async (history: any[], message: string, contex
     model: TEXT_MODEL,
     contents: [...contents, { role: 'user', parts: [{ text: message }] }],
     config: { systemInstruction }
+  });
+
+  return response.text;
+};
+
+/** Chat contextual para supervisores operativos del programa Ford (sin expediente individual). */
+export const chatFordOperationsAssistant = async (
+  history: { role: 'user' | 'model'; text: string }[],
+  message: string,
+  operationsSnapshot: Record<string, unknown>
+) => {
+  const systemInstruction = `Eres un asistente de IA para supervisión operativa de Ford Crédito México (vista programa central).
+Tu audiencia es gerencia y dirección: interpretan red de agencias, volumen de créditos, estados de expedientes y riesgos operativos.
+
+SNAPSHOT ACTUAL (JSON; es la fuente de verdad para cifras y listas):
+${JSON.stringify(operationsSnapshot, null, 2)}
+
+Reglas:
+1. Responde en español, tono profesional y directo.
+2. No inventes números ni agencias: solo usa lo que aparece en el snapshot. Si falta dato, dilo.
+3. Puedes sugerir preguntas de seguimiento, hipótesis cualitativas o buenas prácticas, marcándolas como tales.
+4. Si el usuario pide detalle de un expediente que no está en el snapshot, indica que debe abrir el pipeline o la mesa.`;
+
+  const contents = history.map((msg) => ({
+    role: msg.role === 'user' ? 'user' : 'model',
+    parts: [{ text: msg.text }],
+  }));
+
+  const response = await ai.models.generateContent({
+    model: TEXT_MODEL,
+    contents: [...contents, { role: 'user', parts: [{ text: message }] }],
+    config: { systemInstruction },
+  });
+
+  return response.text;
+};
+
+/** Interpreta lenguaje natural → filtros CRM (solo cliente; sin llamadas externas). */
+export type ParsedCreditCrmFilter = {
+  pipelineStage?: string | null;
+  entityState?: string | null;
+  organizationId?: string | null;
+  keywords?: string | null;
+};
+
+export const parseCreditCrmFilterFromText = async (
+  message: string,
+  agencyIdsSample: string[]
+): Promise<ParsedCreditCrmFilter | null> => {
+  const systemInstruction = `Eres un asistente que convierte una petición en español en filtros para una tabla de expedientes de crédito (Ford México / agencias).
+Responde ÚNICAMENTE con un objeto JSON válido, sin markdown, con estas claves opcionales:
+- "pipelineStage": uno de PRE_QUALIFICATION | MESA_CONTROL | RETURN_TO_AGENCY | ANALYSIS | CONDITIONS | PLACEMENT | SIGNED_CLOSED | null
+- "entityState": código de entidad MX de 3 letras (ej. JAL, CMX, NLE) o null
+- "organizationId": si el usuario nombra una agencia y conoces el id exacto de la lista permitida, o null
+- "keywords": texto para buscar en título o referencia de contrato, o null
+
+Agencias conocidas (IDs exactos si los mencionan): ${JSON.stringify(agencyIdsSample)}
+
+Si no puedes inferir algo, usa null. Ejemplo: {"pipelineStage":"MESA_CONTROL","entityState":"JAL","organizationId":null,"keywords":"rodriguez"}`;
+
+  const response = await ai.models.generateContent({
+    model: TEXT_MODEL,
+    contents: [{ role: 'user', parts: [{ text: message }] }],
+    config: { systemInstruction },
+  });
+
+  const raw = (response.text || '').trim();
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+  try {
+    return JSON.parse(jsonMatch[0]) as ParsedCreditCrmFilter;
+  } catch {
+    return null;
+  }
+};
+
+/** Auditoría por periodos — programa Ford / cumplimiento (snapshot agregado). */
+export const chatFordAuditAssistant = async (
+  history: { role: 'user' | 'model'; text: string }[],
+  message: string,
+  auditSnapshot: Record<string, unknown>
+) => {
+  const systemInstruction = `Eres un auditor inteligente para Ford Crédito México y originación de crédito.
+Recibes un SNAPSHOT JSON de un periodo (expedientes agregados, etapas, agencias). No inventes expedientes ni cifras fuera del snapshot.
+Ayuda a detectar desviaciones operativas, riesgos de cumplimiento e inconsistencias de proceso (sin sustituir dictamen legal).
+Responde en español, tono ejecutivo y accionable.
+
+SNAPSHOT:
+${JSON.stringify(auditSnapshot, null, 2)}`;
+
+  const contents = history.map((msg) => ({
+    role: msg.role === 'user' ? 'user' : 'model',
+    parts: [{ text: msg.text }],
+  }));
+
+  const response = await ai.models.generateContent({
+    model: TEXT_MODEL,
+    contents: [...contents, { role: 'user', parts: [{ text: message }] }],
+    config: { systemInstruction },
   });
 
   return response.text;

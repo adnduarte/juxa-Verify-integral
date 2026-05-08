@@ -20,7 +20,7 @@
         },
         "clientType": {
           "type": "string",
-          "enum": ["GRATUITO", "BOLSA", "SUSCRIPCION"],
+          "enum": ["GRATUITO", "BOLSA", "SUSCRIPCION", "EMPRESARIAL"],
           "description": "Type of client billing scheme."
         },
         "clientProfile": {
@@ -166,11 +166,11 @@
         },
         "loongMontoTotal": {
           "type": "number",
-          "description": "Total amount to finance for Loong Motor."
+          "description": "Optional total amount to finance (retail credit context; legacy field name)."
         },
         "loongEnganche": {
           "type": "number",
-          "description": "Down payment percentage for Loong Motor."
+          "description": "Optional down payment percentage (retail credit context; legacy field name)."
         },
         "linkId": {
           "type": "string",

@@ -43,8 +43,6 @@ export function AIResultRenderer({ resultString, investigationData, onRestart, i
   const isWarning = data?.dictamenFinal?.estado === 'SUJETO A CONSIDERACIÓN DE SOLICITANTE POR INCONSISTENCIAS' || data?.dictamenFinal?.estado === 'REQUIERE_REVISION' || data?.dictamenFinal?.estado === 'CONDICIONADO' || data?.dictamenFinal?.estado === 'A CONSIDERACIÓN';
   const isNoViable = data?.dictamenFinal?.estado === 'NO VIABLE' || data?.dictamenFinal?.estado === 'RECHAZADO';
   const alertaVendedor = data?.dictamenFinal?.alertaVendedor || data?.alertaVendedor;
-  const isLoongMotor = data?.perfil === 'LOONG_MOTOR';
-
   return (
     <div className="space-y-6">
       {/* Acciones Rápidas */}
@@ -94,11 +92,6 @@ export function AIResultRenderer({ resultString, investigationData, onRestart, i
               Dictamen Final: {data.dictamenFinal?.estado || 'DESCONOCIDO'}
             </h4>
           </div>
-          {isLoongMotor && (
-            <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-bold rounded uppercase tracking-widest">
-              LOONG MOTOR
-            </span>
-          )}
         </div>
         <p className={`text-sm ${
           isViable ? 'text-emerald-800' : 
@@ -188,7 +181,7 @@ export function AIResultRenderer({ resultString, investigationData, onRestart, i
               isWarning ? 'text-amber-900' : 
               'text-red-900'
             }`}>
-              Mitigación Sugerida (LOONG MOTOR):
+              Mitigación sugerida:
             </p>
             <div className={`flex items-center gap-2 p-2 rounded-lg ${
               isViable ? 'bg-emerald-100/50' : 'bg-amber-100/50'
@@ -214,7 +207,9 @@ export function AIResultRenderer({ resultString, investigationData, onRestart, i
             </div>
             {data.scoreBreakdown && (
               <div className="flex flex-wrap gap-4 text-[10px] font-bold text-slate-500 uppercase">
-                {!isLoongMotor && <div>Capacidad: {data?.scoreBreakdown?.capacidadPago}%</div>}
+                {data?.scoreBreakdown?.capacidadPago != null && (
+                  <div>Capacidad: {data?.scoreBreakdown?.capacidadPago}%</div>
+                )}
                 <div>Arraigo: {data?.scoreBreakdown?.arraigoDomiciliario}%</div>
                 <div>Docs: {data?.scoreBreakdown?.confiabilidadDocumental}%</div>
                 {data?.scoreBreakdown?.verificacionIdentidad !== undefined && (
@@ -257,7 +252,7 @@ export function AIResultRenderer({ resultString, investigationData, onRestart, i
           </div>
         )}
 
-        {!isLoongMotor && data.congruenciaIngresos && (
+        {data.congruenciaIngresos && (
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center">
               <Building2 className="w-4 h-4 mr-1 text-emerald-500" />

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ShieldCheck, Loader2, AlertCircle, MapPin, CheckCircle2, UploadCloud, FileText, Map as MapIcon, ChevronRight, ChevronLeft, Building, Image as ImageIcon, PlayCircle, Download } from 'lucide-react';
 import { analyzeCandidateData } from '../lib/gemini';
 import { AIResultRenderer } from './AIResultRenderer';
+import { IdentityAntiUsurpationPanel } from './IdentityAntiUsurpationPanel';
 import { useJsApiLoader, Autocomplete, GoogleMap, StreetViewPanorama, Marker } from '@react-google-maps/api';
 
 const MAX_ACCURACY_METERS = 50;
@@ -708,6 +709,10 @@ export function CreditValidator() {
             <div className="bg-neutral-900 p-6 sm:p-8 rounded-2xl border border-neutral-800 shadow-xl">
               <AIResultRenderer resultString={result} />
             </div>
+            <IdentityAntiUsurpationPanel
+              compact
+              caseSummary={`Originación crédito. Cliente: ${clientName}. Folio: ${applicationId}. Extracto dictamen: ${result.slice(0, 4000)}`}
+            />
           </div>
         )}
 
